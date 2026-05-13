@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ReviewForm } from "@/components/ReviewForm";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { aiTaskStatusLabels, aiTaskTypeLabels, formatDate, mistakeStatusLabels, regionLabels } from "@/lib/labels";
+import { aiTaskStatusLabels, aiTaskTypeLabels, formatDate, mistakeStatusLabels } from "@/lib/labels";
 
 function toDateInput(value: Date | null) {
   const date = value ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -22,7 +22,7 @@ export default async function ReviewMistakePage({
     prisma.mistake.findUnique({
       where: { id },
       include: {
-        student: { include: { classGroup: true } },
+        student: true,
         errorType: true,
         knowledgeLinks: true,
         aiTasks: { orderBy: { createdAt: "desc" } },
@@ -37,7 +37,7 @@ export default async function ReviewMistakePage({
   ]);
 
   if (!mistake) notFound();
-  if (mistake.student.classGroup.teacherId !== teacher.id) redirect("/dashboard");
+  if (mistake.student.teacherId !== teacher.id) redirect("/dashboard");
 
   const imageUrl = mistake.imagePath
     ? `/api/uploads/${encodeURIComponent(mistake.imagePath.replace("uploads/", ""))}`
@@ -50,7 +50,7 @@ export default async function ReviewMistakePage({
           <h1 className="page-title">错题校对</h1>
           <p className="page-kicker">
             <Link href={`/students/${mistake.studentId}`}>{mistake.student.name}</Link> ·{" "}
-            {regionLabels[mistake.regionTag]} · {mistakeStatusLabels[mistake.status]}
+            江苏 · 苏教版 · {mistakeStatusLabels[mistake.status]}
           </p>
         </div>
         <div className="button-row">
@@ -74,7 +74,6 @@ export default async function ReviewMistakePage({
               answerText: mistake.answerText,
               analysisText: mistake.analysisText,
               correctionNote: mistake.correctionNote,
-              regionTag: mistake.regionTag,
               sourceYear: mistake.sourceYear,
               questionType: mistake.questionType,
               errorTypeId: mistake.errorTypeId,
@@ -85,7 +84,8 @@ export default async function ReviewMistakePage({
               id: point.id,
               name: point.name,
               module: point.module,
-              region: point.region,
+              textbook: point.textbook,
+              chapter: point.chapter,
             }))}
             errorTypes={errorTypes.map((type) => ({
               id: type.id,

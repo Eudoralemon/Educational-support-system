@@ -5,6 +5,8 @@ dist
 *.db
 *.db-journal
 *.tsbuildinfo
+*.pdf
+tmp/
 uploads/*
 !uploads/.gitkeep
 dev-server*.log

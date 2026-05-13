@@ -8,9 +8,7 @@ datasource db {
 }
 
 enum RegionTag {
-  COMMON
   JS
-  GD
 }
 
 enum MistakeStatus {
@@ -41,19 +39,21 @@ model Teacher {
   name          String
   phone         String?        @unique
   email         String?        @unique
-  classes       ClassGroup[]
+  students      Student[]
   practicePacks PracticePack[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
 
-model ClassGroup {
+model Student {
   id            String         @id @default(cuid())
   name          String
-  region        RegionTag      @default(COMMON)
+  grade         String         @default("高三")
+  school        String?
+  province      String         @default("江苏")
+  textbookTrack String         @default("苏教版")
   teacherId     String
   teacher       Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  students      Student[]
   mistakes      Mistake[]
   practicePacks PracticePack[]
   createdAt     DateTime       @default(now())
@@ -62,28 +62,15 @@ model ClassGroup {
   @@index([teacherId])
 }
 
-model Student {
-  id            String         @id @default(cuid())
-  name          String
-  grade         String         @default("高三")
-  school        String?
-  region        RegionTag      @default(COMMON)
-  classId       String
-  classGroup    ClassGroup     @relation(fields: [classId], references: [id], onDelete: Cascade)
-  mistakes      Mistake[]
-  practicePacks PracticePack[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  @@index([classId])
-}
-
 model KnowledgePoint {
   id            String                  @id @default(cuid())
   code          String                  @unique
   name          String
   module        String
-  region        RegionTag               @default(COMMON)
+  textbook      String
+  chapter       String
+  section       String?
+  region        RegionTag               @default(JS)
   examWeight    Int                     @default(1)
   parentId      String?
   parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
@@ -93,6 +80,7 @@ model KnowledgePoint {
   createdAt     DateTime                @default(now())
 
   @@index([module])
+  @@index([textbook])
   @@index([region])
 }
 
@@ -107,16 +95,14 @@ model ErrorType {
 model Mistake {
   id              String                  @id @default(cuid())
   studentId       String
-  classId         String
   student         Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classGroup      ClassGroup              @relation(fields: [classId], references: [id], onDelete: Cascade)
   questionText    String?
   answerText      String?
   analysisText    String?
   correctionNote  String?
   imagePath       String?
   imageMimeType   String?
-  regionTag       RegionTag               @default(COMMON)
+  regionTag       RegionTag               @default(JS)
   sourceYear      Int?
   questionType    String?
   status          MistakeStatus            @default(DRAFT)
@@ -132,7 +118,6 @@ model Mistake {
   reviewDueAt     DateTime?
 
   @@index([studentId])
-  @@index([classId])
   @@index([createdAt])
   @@index([status])
 }
@@ -152,11 +137,9 @@ model PracticePack {
   title       String
   teacherId   String
   teacher     Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classId     String?
-  classGroup  ClassGroup?        @relation(fields: [classId], references: [id], onDelete: SetNull)
-  studentId   String?
-  student     Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  regionTag   RegionTag          @default(COMMON)
+  studentId   String
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  regionTag   RegionTag          @default(JS)
   status      PracticePackStatus @default(DRAFT)
   items       PracticeItem[]
   createdAt   DateTime           @default(now())
@@ -164,7 +147,6 @@ model PracticePack {
   printedAt   DateTime?
 
   @@index([teacherId])
-  @@index([classId])
   @@index([studentId])
 }
 

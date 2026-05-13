@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import { ClipboardList } from "lucide-react";
 
 export function CreatePracticePackButton({
-  classId,
   studentId,
   knowledgePointIds,
   label = "生成练习包",
 }: {
-  classId?: string;
   studentId?: string;
   knowledgePointIds?: string[];
   label?: string;
@@ -26,7 +24,6 @@ export function CreatePracticePackButton({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          classId,
           studentId,
           knowledgePointIds,
         }),

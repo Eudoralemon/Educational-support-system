@@ -1,6 +1,6 @@
 import { PracticePackStatus, RegionTag } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getClassDiagnostics, getStudentDiagnostics } from "@/lib/diagnostics";
+import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
 
 function asString(value: unknown) {
@@ -15,34 +15,23 @@ function asStringArray(value: unknown) {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
-  const classId = asString(body.classId) || undefined;
-  const studentId = asString(body.studentId) || undefined;
+  const studentId = asString(body.studentId);
   const explicitPointIds = asStringArray(body.knowledgePointIds);
 
-  if (!classId && !studentId) {
-    return NextResponse.json({ error: "需要 classId 或 studentId" }, { status: 400 });
+  if (!studentId) {
+    return NextResponse.json({ error: "需要 studentId" }, { status: 400 });
   }
 
-  const owner = studentId
-    ? await prisma.student.findUnique({
-        where: { id: studentId },
-        include: { classGroup: { include: { teacher: true } } },
-      })
-    : null;
-  const classGroup = classId
-    ? await prisma.classGroup.findUnique({
-        where: { id: classId },
-        include: { teacher: true },
-      })
-    : owner?.classGroup;
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: { teacher: true },
+  });
 
-  if (!classGroup) {
-    return NextResponse.json({ error: "班级不存在" }, { status: 404 });
+  if (!student) {
+    return NextResponse.json({ error: "学生不存在" }, { status: 404 });
   }
 
-  const diagnostics = studentId
-    ? await getStudentDiagnostics(studentId)
-    : await getClassDiagnostics(classGroup.id);
+  const diagnostics = await getStudentDiagnostics(studentId);
   const diagnosticPoints = diagnostics.knowledgePoints.slice(0, 5).map((item) => item.id);
   const knowledgePointIds = explicitPointIds.length > 0 ? explicitPointIds : diagnosticPoints;
   const points = await prisma.knowledgePoint.findMany({
@@ -55,8 +44,7 @@ export async function POST(request: Request) {
 
   const mistakes = await prisma.mistake.findMany({
     where: {
-      classId: classGroup.id,
-      studentId: studentId,
+      studentId,
       knowledgeLinks: {
         some: {
           knowledgePointId: { in: points.map((point) => point.id) },
@@ -72,15 +60,14 @@ export async function POST(request: Request) {
 
   const title =
     asString(body.title) ||
-    `${studentId && owner ? owner.name : classGroup.name} 专项练习 ${new Date().toLocaleDateString("zh-CN")}`;
+    `${student.name} 专项练习 ${new Date().toLocaleDateString("zh-CN")}`;
 
   const pack = await prisma.practicePack.create({
     data: {
       title,
-      teacherId: classGroup.teacherId,
-      classId: classGroup.id,
-      studentId: studentId ?? null,
-      regionTag: (owner?.region ?? classGroup.region ?? "COMMON") as RegionTag,
+      teacherId: student.teacherId,
+      studentId: student.id,
+      regionTag: RegionTag.JS,
       status: PracticePackStatus.DRAFT,
       items: {
         create: points.map((point, index) => {
@@ -94,7 +81,7 @@ export async function POST(request: Request) {
             sourceMistakeId: source?.id,
             prompt: source?.questionText
               ? `【${point.name} 变式】请围绕原错题重新完成：${source.questionText}`
-              : `【${point.name} 专项】请补充一道覆盖“${point.module}”模块的针对性练习题。`,
+              : `【${point.name} 专项】请补充一道覆盖“${point.chapter}”的针对性练习题。`,
             answerText: source?.answerText ?? "",
             analysisText: source?.analysisText
               ? `参考原错因：${source.analysisText}`

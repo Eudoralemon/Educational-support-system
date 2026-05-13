@@ -7,8 +7,7 @@ export default async function NewMistakePage() {
   const teacher = await requireTeacher();
   const [students, knowledgePoints, errorTypes] = await Promise.all([
     prisma.student.findMany({
-      where: { classGroup: { teacherId: teacher.id } },
-      include: { classGroup: true },
+      where: { teacherId: teacher.id },
       orderBy: { createdAt: "desc" },
     }),
     prisma.knowledgePoint.findMany({
@@ -36,14 +35,15 @@ export default async function NewMistakePage() {
           students={students.map((student) => ({
             id: student.id,
             name: student.name,
-            className: student.classGroup.name,
-            region: student.region,
+            grade: student.grade,
+            school: student.school,
           }))}
           knowledgePoints={knowledgePoints.map((point) => ({
             id: point.id,
             name: point.name,
             module: point.module,
-            region: point.region,
+            textbook: point.textbook,
+            chapter: point.chapter,
           }))}
           errorTypes={errorTypes.map((type) => ({
             id: type.id,

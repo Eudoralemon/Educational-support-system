@@ -1,44 +1,54 @@
 import Link from "next/link";
-import { BarChart3, BookOpen, ClipboardList, Plus, Upload, Users } from "lucide-react";
-import { createClass } from "@/app/actions";
+import { BarChart3, BookOpen, ClipboardList, Plus, Upload, UserRound } from "lucide-react";
+import { createStudent } from "@/app/actions";
+import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
+import { getTeacherDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
-import { formatDate, mistakeStatusLabels, regionLabels } from "@/lib/labels";
+import { formatDate, mistakeStatusLabels, practicePackStatusLabels } from "@/lib/labels";
+
+const textbookNames = [
+  "苏教版高中数学 必修第1册",
+  "苏教版高中数学 必修第2册",
+  "苏教版高中数学 选择性必修1",
+  "苏教版高中数学 选择性必修2",
+];
 
 export default async function DashboardPage() {
   const teacher = await requireTeacher();
-  const [classes, recentMistakes, practicePacks] = await Promise.all([
-    prisma.classGroup.findMany({
-      where: { teacherId: teacher.id },
-      include: {
-        students: true,
-        _count: { select: { mistakes: true, practicePacks: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.mistake.findMany({
-      where: { classGroup: { teacherId: teacher.id } },
-      include: { student: true, classGroup: true },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-    prisma.practicePack.findMany({
-      where: { teacherId: teacher.id },
-      include: { classGroup: true, student: true, items: true },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-    }),
-  ]);
+  const [students, recentMistakes, practicePacks, diagnostics, textbookCount] =
+    await Promise.all([
+      prisma.student.findMany({
+        where: { teacherId: teacher.id },
+        include: {
+          _count: { select: { mistakes: true, practicePacks: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.mistake.findMany({
+        where: { student: { teacherId: teacher.id } },
+        include: { student: true },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      prisma.practicePack.findMany({
+        where: { teacherId: teacher.id },
+        include: { student: true, items: true },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+      }),
+      getTeacherDiagnostics(teacher.id),
+      prisma.knowledgePoint.count(),
+    ]);
 
-  const studentCount = classes.reduce((sum, item) => sum + item.students.length, 0);
-  const mistakeCount = classes.reduce((sum, item) => sum + item._count.mistakes, 0);
+  const mistakeCount = students.reduce((sum, item) => sum + item._count.mistakes, 0);
 
   return (
     <>
       <header className="page-header">
         <div>
-          <h1 className="page-title">工作台</h1>
-          <p className="page-kicker">今天从错题、薄弱项和练习包开始。</p>
+          <h1 className="page-title">学生工作台</h1>
+          <p className="page-kicker">江苏 · 苏教版 · 以学生为单位沉淀错题诊断。</p>
         </div>
         <div className="button-row">
           <Link className="button" href="/mistakes/new">
@@ -50,39 +60,39 @@ export default async function DashboardPage() {
 
       <section className="grid three">
         <div className="stat">
-          <span className="stat-label">班级</span>
-          <span className="stat-value">{classes.length}</span>
-        </div>
-        <div className="stat">
           <span className="stat-label">学生</span>
-          <span className="stat-value">{studentCount}</span>
+          <span className="stat-value">{students.length}</span>
         </div>
         <div className="stat">
           <span className="stat-label">错题</span>
           <span className="stat-value">{mistakeCount}</span>
         </div>
+        <div className="stat">
+          <span className="stat-label">教材知识点</span>
+          <span className="stat-value">{textbookCount}</span>
+        </div>
       </section>
 
       <section className="grid main" style={{ marginTop: 16 }}>
         <div className="grid">
-          <section className="panel" id="classes">
+          <section className="panel" id="students">
             <h2 className="panel-title">
-              <Users size={18} />
-              班级
+              <UserRound size={18} />
+              学生
             </h2>
-            {classes.length === 0 ? (
-              <div className="empty">还没有班级。</div>
+            {students.length === 0 ? (
+              <div className="empty">还没有学生。</div>
             ) : (
               <div className="grid two">
-                {classes.map((classGroup) => (
-                  <Link className="card" href={`/classes/${classGroup.id}`} key={classGroup.id}>
+                {students.map((student) => (
+                  <Link className="card" href={`/students/${student.id}`} key={student.id}>
                     <div className="item-top">
-                      <strong>{classGroup.name}</strong>
-                      <span className="badge">{regionLabels[classGroup.region]}</span>
+                      <strong>{student.name}</strong>
+                      <span className="badge">江苏</span>
                     </div>
                     <span className="muted">
-                      {classGroup.students.length} 名学生 · {classGroup._count.mistakes} 道错题 ·{" "}
-                      {classGroup._count.practicePacks} 份练习
+                      {student.grade} · {student.school || "未填写学校"} · {student._count.mistakes} 道错题 ·{" "}
+                      {student._count.practicePacks} 份练习
                     </span>
                   </Link>
                 ))}
@@ -147,7 +157,7 @@ export default async function DashboardPage() {
                       <span className="badge gray">{pack.items.length} 题</span>
                     </div>
                     <span className="muted">
-                      {pack.student?.name ?? pack.classGroup?.name ?? "未绑定对象"} · {formatDate(pack.createdAt)}
+                      {pack.student.name} · {practicePackStatusLabels[pack.status]} · {formatDate(pack.createdAt)}
                     </span>
                   </Link>
                 ))}
@@ -156,29 +166,59 @@ export default async function DashboardPage() {
           </section>
         </div>
 
-        <aside className="panel">
-          <h2 className="panel-title">
-            <Plus size={18} />
-            新建班级
-          </h2>
-          <form action={createClass} className="form-grid">
-            <div className="field">
-              <label htmlFor="class-name">班级名称</label>
-              <input className="input" id="class-name" name="name" placeholder="高三数学A班" />
-            </div>
-            <div className="field">
-              <label htmlFor="class-region">地区标签</label>
-              <select className="select" id="class-region" name="region" defaultValue="COMMON">
-                <option value="COMMON">通用</option>
-                <option value="JS">江苏</option>
-                <option value="GD">广东</option>
-              </select>
-            </div>
-            <button className="button" type="submit">
+        <aside className="grid">
+          <section className="panel">
+            <h2 className="panel-title">
+              <Plus size={18} />
+              新增学生
+            </h2>
+            <form action={createStudent} className="form-grid">
+              <div className="field">
+                <label htmlFor="student-name">姓名</label>
+                <input className="input" id="student-name" name="name" />
+              </div>
+              <div className="form-grid two">
+                <div className="field">
+                  <label htmlFor="student-grade">年级</label>
+                  <input className="input" id="student-grade" name="grade" defaultValue="高三" />
+                </div>
+                <div className="field">
+                  <label>地区</label>
+                  <div className="input">江苏</div>
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="student-school">学校</label>
+                <input className="input" id="student-school" name="school" />
+              </div>
+              <button className="button" type="submit">
+                <Plus size={18} />
+                保存学生
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <h2 className="panel-title">
               <BookOpen size={18} />
-              保存班级
-            </button>
-          </form>
+              教材范围
+            </h2>
+            <div className="list">
+              {textbookNames.map((name) => (
+                <div className="list-item" key={name}>
+                  <strong>{name}</strong>
+                  <span className="muted">已抽取目录为知识点标签</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <DiagnosticPanel
+            knowledgePoints={diagnostics.knowledgePoints}
+            errorTypes={diagnostics.errorTypes}
+            dueMistakes={diagnostics.dueMistakes}
+            trend={diagnostics.trend}
+          />
         </aside>
       </section>
     </>

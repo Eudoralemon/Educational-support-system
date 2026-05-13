@@ -11,14 +11,6 @@ function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function asRegion(value: string): RegionTag {
-  if (value === "JS" || value === "GD" || value === "COMMON") {
-    return value;
-  }
-
-  return "COMMON";
-}
-
 function parseIds(value: string) {
   if (!value) return [];
   try {
@@ -62,7 +54,7 @@ export async function POST(request: Request) {
   const studentId = asString(formData.get("studentId"));
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    include: { classGroup: true },
+    include: { teacher: true },
   });
 
   if (!student) {
@@ -77,13 +69,12 @@ export async function POST(request: Request) {
   const mistake = await prisma.mistake.create({
     data: {
       studentId: student.id,
-      classId: student.classId,
       questionText: asString(formData.get("questionText")) || null,
       answerText: asString(formData.get("answerText")) || null,
       analysisText: asString(formData.get("analysisText")) || null,
       questionType: asString(formData.get("questionType")) || null,
       sourceYear: Number.isFinite(sourceYear) ? sourceYear : null,
-      regionTag: asRegion(asString(formData.get("regionTag")) || student.region),
+      regionTag: RegionTag.JS,
       errorTypeId: asString(formData.get("errorTypeId")) || null,
       status: MistakeStatus.DRAFT,
       imagePath: image?.imagePath,

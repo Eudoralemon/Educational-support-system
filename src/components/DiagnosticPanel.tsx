@@ -6,6 +6,8 @@ type KnowledgePointSummary = {
   id: string;
   name: string;
   module: string;
+  textbook?: string;
+  chapter?: string;
   count: number;
   students?: number;
 };
@@ -61,7 +63,7 @@ export function KnowledgeList({ items }: { items: KnowledgePointSummary[] }) {
             <span className="badge">{item.count} 次</span>
           </div>
           <div className="muted">
-            {item.module}
+            {item.chapter ?? item.module}
             {typeof item.students === "number" ? ` · ${item.students} 名学生` : ""}
           </div>
           <div className="bar">

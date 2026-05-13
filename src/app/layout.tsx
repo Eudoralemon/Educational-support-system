@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, BookOpenCheck, ClipboardList, Home, LogOut, Upload } from "lucide-react";
+import { BarChart3, ClipboardList, Home, LogOut, Upload, UserRound } from "lucide-react";
 import { logoutTeacher } from "@/app/actions";
 import { getCurrentTeacher } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "高中数学错题诊断",
-  description: "面向江苏/广东考生的轻量教学辅助系统",
+  description: "面向江苏高中数学学生的轻量教学辅助系统",
 };
 
 function Sidebar({ teacherName }: { teacherName?: string }) {
@@ -26,9 +26,9 @@ function Sidebar({ teacherName }: { teacherName?: string }) {
           <Upload size={18} />
           录入错题
         </Link>
-        <Link className="nav-link" href="/dashboard#classes">
-          <BookOpenCheck size={18} />
-          班级
+        <Link className="nav-link" href="/dashboard#students">
+          <UserRound size={18} />
+          学生
         </Link>
         <Link className="nav-link" href="/dashboard#practice">
           <ClipboardList size={18} />

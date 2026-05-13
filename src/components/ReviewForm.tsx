@@ -10,7 +10,6 @@ type ReviewMistake = {
   answerText: string | null;
   analysisText: string | null;
   correctionNote: string | null;
-  regionTag: "COMMON" | "JS" | "GD";
   sourceYear: number | null;
   questionType: string | null;
   errorTypeId: string | null;
@@ -22,7 +21,8 @@ type KnowledgePointOption = {
   id: string;
   name: string;
   module: string;
-  region: "COMMON" | "JS" | "GD";
+  textbook: string;
+  chapter: string;
 };
 
 type ErrorTypeOption = {
@@ -67,7 +67,6 @@ export function ReviewForm({
           answerText: formData.get("answerText"),
           analysisText: formData.get("analysisText"),
           correctionNote: formData.get("correctionNote"),
-          regionTag: formData.get("regionTag"),
           sourceYear: formData.get("sourceYear"),
           questionType: formData.get("questionType"),
           errorTypeId: formData.get("errorTypeId"),
@@ -90,12 +89,8 @@ export function ReviewForm({
     <form action={handleSubmit} className="form-grid">
       <div className="form-grid two">
         <div className="field">
-          <label htmlFor="regionTag">地区标签</label>
-          <select className="select" id="regionTag" name="regionTag" defaultValue={mistake.regionTag}>
-            <option value="COMMON">通用</option>
-            <option value="JS">江苏</option>
-            <option value="GD">广东</option>
-          </select>
+          <label>地区与教材</label>
+          <div className="input">江苏 · 苏教版高中数学</div>
         </div>
         <div className="field">
           <label htmlFor="questionType">题型</label>
@@ -166,7 +161,9 @@ export function ReviewForm({
                   type="checkbox"
                 />
               </span>
-              <span className="muted">{point.module}</span>
+              <span className="muted">
+                {point.textbook} · {point.chapter}
+              </span>
             </label>
           ))}
         </div>

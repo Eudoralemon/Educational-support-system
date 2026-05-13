@@ -6,7 +6,7 @@ import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
-import { formatDate, mistakeStatusLabels, regionLabels } from "@/lib/labels";
+import { formatDate, mistakeStatusLabels } from "@/lib/labels";
 
 export default async function StudentPage({
   params,
@@ -18,7 +18,6 @@ export default async function StudentPage({
   const student = await prisma.student.findUnique({
     where: { id },
     include: {
-      classGroup: true,
       mistakes: {
         include: {
           errorType: true,
@@ -34,7 +33,7 @@ export default async function StudentPage({
   });
 
   if (!student) notFound();
-  if (student.classGroup.teacherId !== teacher.id) redirect("/dashboard");
+  if (student.teacherId !== teacher.id) redirect("/dashboard");
 
   const diagnostics = await getStudentDiagnostics(student.id);
 
@@ -44,7 +43,7 @@ export default async function StudentPage({
         <div>
           <h1 className="page-title">{student.name}</h1>
           <p className="page-kicker">
-            {student.classGroup.name} · {student.grade} · {regionLabels[student.region]}
+            江苏 · 苏教版 · {student.grade} · {student.school || "未填写学校"}
           </p>
         </div>
         <div className="button-row">
@@ -95,7 +94,9 @@ export default async function StudentPage({
                       </span>
                     </div>
                     <span className="muted">
-                      {mistake.knowledgeLinks.map((link) => link.knowledgePoint.name).join("、") || "未标知识点"}
+                      {mistake.knowledgeLinks
+                        .map((link) => `${link.knowledgePoint.chapter} · ${link.knowledgePoint.name}`)
+                        .join("、") || "未标知识点"}
                       {mistake.errorType ? ` · ${mistake.errorType.name}` : ""} · {formatDate(mistake.createdAt)}
                     </span>
                   </Link>

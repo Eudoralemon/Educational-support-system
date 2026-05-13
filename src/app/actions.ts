@@ -1,6 +1,5 @@
 "use server";
 
-import { RegionTag } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -10,14 +9,6 @@ import { prisma } from "@/lib/db";
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function getRegion(value: string | null | undefined): RegionTag {
-  if (value === "JS" || value === "GD" || value === "COMMON") {
-    return value;
-  }
-
-  return "COMMON";
 }
 
 export async function loginTeacher(formData: FormData) {
@@ -51,7 +42,7 @@ export async function logoutTeacher() {
   redirect("/login");
 }
 
-export async function createClass(formData: FormData) {
+export async function createStudent(formData: FormData) {
   const cookieStore = await cookies();
   const teacherId = cookieStore.get(teacherCookieName)?.value;
 
@@ -62,62 +53,16 @@ export async function createClass(formData: FormData) {
   const name = getString(formData, "name");
   if (!name) return;
 
-  await prisma.classGroup.create({
-    data: {
-      name,
-      teacherId,
-      region: getRegion(getString(formData, "region")),
-    },
-  });
-
-  revalidatePath("/dashboard");
-}
-
-export async function createStudent(formData: FormData) {
-  const classId = getString(formData, "classId");
-  const name = getString(formData, "name");
-
-  if (!classId || !name) return;
-
-  const classGroup = await prisma.classGroup.findUnique({
-    where: { id: classId },
-  });
-
-  if (!classGroup) return;
-
   await prisma.student.create({
     data: {
       name,
-      classId,
+      teacherId,
       grade: getString(formData, "grade") || "高三",
       school: getString(formData, "school") || null,
-      region: getRegion(getString(formData, "region") || classGroup.region),
+      province: "江苏",
+      textbookTrack: "苏教版",
     },
   });
 
-  revalidatePath(`/classes/${classId}`);
   revalidatePath("/dashboard");
-}
-
-export async function createPracticePackAction(formData: FormData) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/practice-packs`, {
-    method: "POST",
-    body: JSON.stringify({
-      title: getString(formData, "title") || undefined,
-      classId: getString(formData, "classId") || undefined,
-      studentId: getString(formData, "studentId") || undefined,
-      knowledgePointIds: getString(formData, "knowledgePointIds")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) return;
-
-  const payload = (await response.json()) as { id: string };
-  redirect(`/practice-packs/${payload.id}`);
 }

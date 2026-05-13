@@ -6,6 +6,8 @@ type KnowledgeSummary = {
   code: string;
   name: string;
   module: string;
+  textbook: string;
+  chapter: string;
   count: number;
   students: number;
   weight: number;
@@ -44,6 +46,31 @@ function toTrend(mistakes: { createdAt: Date }[]) {
   return Array.from(map.entries()).map(([date, count]) => ({ date, count }));
 }
 
+async function getMistakesForDiagnostics(where: {
+  teacherId?: string;
+  studentId?: string;
+}) {
+  return prisma.mistake.findMany({
+    where: {
+      status: MistakeStatus.REVIEWED,
+      studentId: where.studentId,
+      student: where.teacherId ? { teacherId: where.teacherId } : undefined,
+    },
+    include: {
+      student: true,
+      errorType: true,
+      knowledgeLinks: {
+        include: {
+          knowledgePoint: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}
+
 function summarizeKnowledge(
   mistakes: Awaited<ReturnType<typeof getMistakesForDiagnostics>>,
 ) {
@@ -68,6 +95,8 @@ function summarizeKnowledge(
           code: point.code,
           name: point.name,
           module: point.module,
+          textbook: point.textbook,
+          chapter: point.chapter,
           count: 1,
           students: 1,
           weight: point.examWeight,
@@ -108,43 +137,10 @@ function summarizeErrors(
   return Array.from(map.values()).sort((a, b) => b.count - a.count);
 }
 
-async function getMistakesForDiagnostics(where: {
-  classId?: string;
-  studentId?: string;
-}) {
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
-
-  return prisma.mistake.findMany({
-    where: {
-      ...where,
-      status: MistakeStatus.REVIEWED,
-    },
-    include: {
-      student: true,
-      errorType: true,
-      knowledgeLinks: {
-        include: {
-          knowledgePoint: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-}
-
-export async function getClassDiagnostics(classId: string) {
-  const [classGroup, mistakes] = await Promise.all([
-    prisma.classGroup.findUnique({
-      where: { id: classId },
-      include: { students: true },
-    }),
-    getMistakesForDiagnostics({ classId }),
-  ]);
-
-  const dueMistakes = mistakes
+function dueMistakes(
+  mistakes: Awaited<ReturnType<typeof getMistakesForDiagnostics>>,
+) {
+  return mistakes
     .filter((mistake) => mistake.reviewDueAt && mistake.reviewDueAt <= new Date())
     .slice(0, 8)
     .map((mistake) => ({
@@ -153,18 +149,26 @@ export async function getClassDiagnostics(classId: string) {
       questionText: mistake.questionText,
       reviewDueAt: mistake.reviewDueAt,
     }));
+}
+
+export async function getTeacherDiagnostics(teacherId: string) {
+  const [teacher, students, mistakes] = await Promise.all([
+    prisma.teacher.findUnique({ where: { id: teacherId } }),
+    prisma.student.findMany({ where: { teacherId } }),
+    getMistakesForDiagnostics({ teacherId }),
+  ]);
 
   return {
-    classGroup,
+    teacher,
     totals: {
-      students: classGroup?.students.length ?? 0,
+      students: students.length,
       mistakes: mistakes.length,
       reviewed: mistakes.length,
     },
     knowledgePoints: summarizeKnowledge(mistakes),
     errorTypes: summarizeErrors(mistakes),
     trend: toTrend(mistakes),
-    dueMistakes,
+    dueMistakes: dueMistakes(mistakes),
   };
 }
 
@@ -172,7 +176,7 @@ export async function getStudentDiagnostics(studentId: string) {
   const [student, mistakes] = await Promise.all([
     prisma.student.findUnique({
       where: { id: studentId },
-      include: { classGroup: true },
+      include: { teacher: true },
     }),
     getMistakesForDiagnostics({ studentId }),
   ]);
@@ -180,14 +184,6 @@ export async function getStudentDiagnostics(studentId: string) {
   const repeatedKnowledge = summarizeKnowledge(mistakes).filter(
     (item) => item.count >= 2,
   );
-  const dueMistakes = mistakes
-    .filter((mistake) => mistake.reviewDueAt && mistake.reviewDueAt <= new Date())
-    .slice(0, 8)
-    .map((mistake) => ({
-      id: mistake.id,
-      questionText: mistake.questionText,
-      reviewDueAt: mistake.reviewDueAt,
-    }));
 
   return {
     student,
@@ -199,6 +195,6 @@ export async function getStudentDiagnostics(studentId: string) {
     repeatedKnowledge,
     errorTypes: summarizeErrors(mistakes),
     trend: toTrend(mistakes),
-    dueMistakes,
+    dueMistakes: dueMistakes(mistakes),
   };
 }

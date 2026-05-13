@@ -7,15 +7,16 @@ import { Save, Upload } from "lucide-react";
 type StudentOption = {
   id: string;
   name: string;
-  className: string;
-  region: "COMMON" | "JS" | "GD";
+  grade: string;
+  school?: string | null;
 };
 
 type KnowledgePointOption = {
   id: string;
   name: string;
   module: string;
-  region: "COMMON" | "JS" | "GD";
+  textbook: string;
+  chapter: string;
 };
 
 type ErrorTypeOption = {
@@ -67,7 +68,7 @@ export function MistakeUploadForm({
   }
 
   if (students.length === 0) {
-    return <div className="empty">请先创建班级和学生。</div>;
+    return <div className="empty">请先创建学生。</div>;
   }
 
   return (
@@ -84,18 +85,16 @@ export function MistakeUploadForm({
           >
             {students.map((student) => (
               <option key={student.id} value={student.id}>
-                {student.className} · {student.name}
+                {student.name} · {student.grade}
               </option>
             ))}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="regionTag">地区标签</label>
-          <select className="select" id="regionTag" name="regionTag" defaultValue={selectedStudent?.region ?? "COMMON"}>
-            <option value="COMMON">通用</option>
-            <option value="JS">江苏</option>
-            <option value="GD">广东</option>
-          </select>
+          <label>教材范围</label>
+          <div className="input">
+            江苏 · 苏教版 · {selectedStudent?.school || "未填写学校"}
+          </div>
         </div>
       </div>
 
@@ -151,9 +150,11 @@ export function MistakeUploadForm({
             <label className="list-item" key={point.id}>
               <span className="item-top">
                 <span>{point.name}</span>
-                <span className="badge gray">{point.region}</span>
+                <span className="badge gray">{point.module}</span>
               </span>
-              <span className="muted">{point.module}</span>
+              <span className="muted">
+                {point.textbook} · {point.chapter}
+              </span>
               <input name="knowledgePointIds" type="checkbox" value={point.id} />
             </label>
           ))}

@@ -6,14 +6,6 @@ function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function asRegion(value: unknown): RegionTag {
-  if (value === "JS" || value === "GD" || value === "COMMON") {
-    return value;
-  }
-
-  return "COMMON";
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -35,7 +27,7 @@ export async function PATCH(
       correctionNote: asString(body.correctionNote) || null,
       questionType: asString(body.questionType) || null,
       sourceYear: Number.isFinite(sourceYear) ? sourceYear : null,
-      regionTag: asRegion(body.regionTag),
+      regionTag: RegionTag.JS,
       errorTypeId: asString(body.errorTypeId) || null,
       status: MistakeStatus.REVIEWED,
       reviewedAt: new Date(),

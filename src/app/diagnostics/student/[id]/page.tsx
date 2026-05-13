@@ -5,7 +5,6 @@ import { CreatePracticePackButton } from "@/components/CreatePracticePackButton"
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
-import { regionLabels } from "@/lib/labels";
 
 export default async function StudentDiagnosticsPage({
   params,
@@ -17,16 +16,14 @@ export default async function StudentDiagnosticsPage({
   const diagnostics = await getStudentDiagnostics(id);
 
   if (!diagnostics.student) notFound();
-  if (diagnostics.student.classGroup.teacherId !== teacher.id) redirect("/dashboard");
+  if (diagnostics.student.teacherId !== teacher.id) redirect("/dashboard");
 
   return (
     <>
       <header className="page-header">
         <div>
           <h1 className="page-title">{diagnostics.student.name} 诊断</h1>
-          <p className="page-kicker">
-            {diagnostics.student.classGroup.name} · {regionLabels[diagnostics.student.region]}
-          </p>
+          <p className="page-kicker">江苏 · 苏教版 · 以个人错题为诊断单位</p>
         </div>
         <div className="button-row">
           <Link className="button secondary" href={`/students/${diagnostics.student.id}`}>
@@ -77,7 +74,7 @@ export default async function StudentDiagnosticsPage({
             <thead>
               <tr>
                 <th>知识点</th>
-                <th>模块</th>
+                <th>教材章节</th>
                 <th>次数</th>
               </tr>
             </thead>
@@ -85,7 +82,7 @@ export default async function StudentDiagnosticsPage({
               {diagnostics.repeatedKnowledge.map((item) => (
                 <tr key={item.id}>
                   <td>{item.name}</td>
-                  <td>{item.module}</td>
+                  <td>{item.chapter}</td>
                   <td>{item.count}</td>
                 </tr>
               ))}

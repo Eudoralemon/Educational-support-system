@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { PracticePackEditor } from "@/components/PracticePackEditor";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { formatDate, practicePackStatusLabels, regionLabels } from "@/lib/labels";
+import { formatDate, practicePackStatusLabels } from "@/lib/labels";
 
 export default async function PracticePackPage({
   params,
@@ -16,7 +16,6 @@ export default async function PracticePackPage({
   const pack = await prisma.practicePack.findUnique({
     where: { id },
     include: {
-      classGroup: true,
       student: true,
       items: {
         include: { knowledgePoint: true },
@@ -34,12 +33,12 @@ export default async function PracticePackPage({
         <div>
           <h1 className="page-title">练习包编辑</h1>
           <p className="page-kicker">
-            {pack.student?.name ?? pack.classGroup?.name ?? "未绑定对象"} · {regionLabels[pack.regionTag]} ·{" "}
+            {pack.student.name} · 江苏 · 苏教版 ·{" "}
             {practicePackStatusLabels[pack.status]} · {formatDate(pack.createdAt)}
           </p>
         </div>
         <div className="button-row">
-          <Link className="button secondary" href={pack.studentId ? `/students/${pack.studentId}` : `/classes/${pack.classId}`}>
+          <Link className="button secondary" href={`/students/${pack.studentId}`}>
             <ArrowLeft size={18} />
             返回
           </Link>

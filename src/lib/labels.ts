@@ -7,9 +7,7 @@ import {
 } from "@prisma/client";
 
 export const regionLabels: Record<RegionTag, string> = {
-  COMMON: "通用",
   JS: "江苏",
-  GD: "广东",
 };
 
 export const mistakeStatusLabels: Record<MistakeStatus, string> = {
