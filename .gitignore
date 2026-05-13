@@ -1,0 +1,10 @@
+node_modules
+.next
+dist
+.env
+*.db
+*.db-journal
+*.tsbuildinfo
+uploads/*
+!uploads/.gitkeep
+dev-server*.log

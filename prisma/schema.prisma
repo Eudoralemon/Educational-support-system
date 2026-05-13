@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum RegionTag {
+  COMMON
+  JS
+  GD
+}
+
+enum MistakeStatus {
+  DRAFT
+  REVIEWED
+}
+
+enum AiTaskType {
+  OCR
+  EXPLANATION_REWRITE
+  VARIANT_GENERATION
+}
+
+enum AiTaskStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum PracticePackStatus {
+  DRAFT
+  CONFIRMED
+}
+
+model Teacher {
+  id            String         @id @default(cuid())
+  name          String
+  phone         String?        @unique
+  email         String?        @unique
+  classes       ClassGroup[]
+  practicePacks PracticePack[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model ClassGroup {
+  id            String         @id @default(cuid())
+  name          String
+  region        RegionTag      @default(COMMON)
+  teacherId     String
+  teacher       Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  students      Student[]
+  mistakes      Mistake[]
+  practicePacks PracticePack[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([teacherId])
+}
+
+model Student {
+  id            String         @id @default(cuid())
+  name          String
+  grade         String         @default("高三")
+  school        String?
+  region        RegionTag      @default(COMMON)
+  classId       String
+  classGroup    ClassGroup     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  mistakes      Mistake[]
+  practicePacks PracticePack[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([classId])
+}
+
+model KnowledgePoint {
+  id            String                  @id @default(cuid())
+  code          String                  @unique
+  name          String
+  module        String
+  region        RegionTag               @default(COMMON)
+  examWeight    Int                     @default(1)
+  parentId      String?
+  parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
+  children      KnowledgePoint[]        @relation("KnowledgeTree")
+  mistakeLinks  MistakeKnowledgePoint[]
+  practiceItems PracticeItem[]
+  createdAt     DateTime                @default(now())
+
+  @@index([module])
+  @@index([region])
+}
+
+model ErrorType {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  name        String
+  description String
+  mistakes    Mistake[]
+}
+
+model Mistake {
+  id              String                  @id @default(cuid())
+  studentId       String
+  classId         String
+  student         Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classGroup      ClassGroup              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  questionText    String?
+  answerText      String?
+  analysisText    String?
+  correctionNote  String?
+  imagePath       String?
+  imageMimeType   String?
+  regionTag       RegionTag               @default(COMMON)
+  sourceYear      Int?
+  questionType    String?
+  status          MistakeStatus            @default(DRAFT)
+  errorTypeId     String?
+  errorType       ErrorType?               @relation(fields: [errorTypeId], references: [id])
+  aiDraftJson     Json?
+  knowledgeLinks  MistakeKnowledgePoint[]
+  practiceItems   PracticeItem[]
+  aiTasks         AiTask[]
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  reviewedAt      DateTime?
+  reviewDueAt     DateTime?
+
+  @@index([studentId])
+  @@index([classId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model MistakeKnowledgePoint {
+  mistakeId        String
+  knowledgePointId String
+  mistake          Mistake        @relation(fields: [mistakeId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+
+  @@id([mistakeId, knowledgePointId])
+  @@index([knowledgePointId])
+}
+
+model PracticePack {
+  id          String             @id @default(cuid())
+  title       String
+  teacherId   String
+  teacher     Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classId     String?
+  classGroup  ClassGroup?        @relation(fields: [classId], references: [id], onDelete: SetNull)
+  studentId   String?
+  student     Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  regionTag   RegionTag          @default(COMMON)
+  status      PracticePackStatus @default(DRAFT)
+  items       PracticeItem[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  printedAt   DateTime?
+
+  @@index([teacherId])
+  @@index([classId])
+  @@index([studentId])
+}
+
+model PracticeItem {
+  id               String          @id @default(cuid())
+  packId           String
+  pack             PracticePack    @relation(fields: [packId], references: [id], onDelete: Cascade)
+  prompt           String
+  answerText       String?
+  analysisText     String?
+  order            Int
+  isAiDraft        Boolean         @default(false)
+  knowledgePointId String?
+  knowledgePoint   KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
+  sourceMistakeId  String?
+  sourceMistake    Mistake?        @relation(fields: [sourceMistakeId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+
+  @@index([packId])
+}
+
+model AiTask {
+  id           String       @id @default(cuid())
+  type         AiTaskType
+  status       AiTaskStatus @default(PENDING)
+  provider     String       @default("none")
+  mistakeId    String?
+  mistake      Mistake?     @relation(fields: [mistakeId], references: [id], onDelete: SetNull)
+  inputJson    Json?
+  outputJson   Json?
+  errorMessage String?
+  createdAt    DateTime     @default(now())
+  completedAt  DateTime?
+
+  @@index([mistakeId])
+  @@index([status])
+}
