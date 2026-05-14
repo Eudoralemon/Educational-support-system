@@ -10,6 +10,13 @@ type PracticeItem = {
   answerText: string | null;
   analysisText: string | null;
   isAiDraft: boolean;
+  textbookExercise?: {
+    textbook: string;
+    chapter: string;
+    section: string | null;
+    sourceLabel: string;
+    sourcePage: number | null;
+  } | null;
   knowledgePoint?: {
     name: string;
     module: string;
@@ -92,6 +99,14 @@ export function PracticePackEditor({ pack }: { pack: PracticePack }) {
                 {item.knowledgePoint?.name ?? "自定义题"}
               </span>
             </div>
+            {item.textbookExercise ? (
+              <span className="muted">
+                来源：{item.textbookExercise.textbook} · {item.textbookExercise.chapter}
+                {item.textbookExercise.section ? ` · ${item.textbookExercise.section}` : ""} ·{" "}
+                {item.textbookExercise.sourceLabel}
+                {item.textbookExercise.sourcePage ? ` · PDF第${item.textbookExercise.sourcePage}页附近` : ""}
+              </span>
+            ) : null}
             <div className="field">
               <label htmlFor={`prompt-${item.id}`}>题目</label>
               <textarea

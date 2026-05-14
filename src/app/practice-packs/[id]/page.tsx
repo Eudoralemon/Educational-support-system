@@ -18,7 +18,7 @@ export default async function PracticePackPage({
     include: {
       student: true,
       items: {
-        include: { knowledgePoint: true },
+        include: { knowledgePoint: true, textbookExercise: true },
         orderBy: { order: "asc" },
       },
     },
@@ -62,6 +62,15 @@ export default async function PracticePackPage({
               answerText: item.answerText,
               analysisText: item.analysisText,
               isAiDraft: item.isAiDraft,
+              textbookExercise: item.textbookExercise
+                ? {
+                    textbook: item.textbookExercise.textbook,
+                    chapter: item.textbookExercise.chapter,
+                    section: item.textbookExercise.section,
+                    sourceLabel: item.textbookExercise.sourceLabel,
+                    sourcePage: item.textbookExercise.sourcePage,
+                  }
+                : null,
               knowledgePoint: item.knowledgePoint
                 ? {
                     name: item.knowledgePoint.name,

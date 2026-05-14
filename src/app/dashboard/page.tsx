@@ -16,7 +16,7 @@ const textbookNames = [
 
 export default async function DashboardPage() {
   const teacher = await requireTeacher();
-  const [students, recentMistakes, practicePacks, diagnostics, textbookCount] =
+  const [students, recentMistakes, practicePacks, diagnostics, textbookCount, exerciseCount] =
     await Promise.all([
       prisma.student.findMany({
         where: { teacherId: teacher.id },
@@ -39,6 +39,7 @@ export default async function DashboardPage() {
       }),
       getTeacherDiagnostics(teacher.id),
       prisma.knowledgePoint.count(),
+      prisma.textbookExercise.count(),
     ]);
 
   const mistakeCount = students.reduce((sum, item) => sum + item._count.mistakes, 0);
@@ -68,8 +69,8 @@ export default async function DashboardPage() {
           <span className="stat-value">{mistakeCount}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">教材知识点</span>
-          <span className="stat-value">{textbookCount}</span>
+          <span className="stat-label">教材题源</span>
+          <span className="stat-value">{exerciseCount}</span>
         </div>
       </section>
 
@@ -201,7 +202,7 @@ export default async function DashboardPage() {
           <section className="panel">
             <h2 className="panel-title">
               <BookOpen size={18} />
-              教材范围
+              教材范围 · {textbookCount} 个知识点
             </h2>
             <div className="list">
               {textbookNames.map((name) => (

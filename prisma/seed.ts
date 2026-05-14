@@ -1,6 +1,16 @@
 import { MistakeStatus, PrismaClient, RegionTag } from "@prisma/client";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 
 const prisma = new PrismaClient();
+
+const textbookPdfFiles: Record<string, string> = {
+  "苏教版高中数学 必修第1册": "苏教版高中数学 必修第1册.pdf",
+  "苏教版高中数学 必修第2册": "苏教版高中数学 必修第2册.pdf",
+  "苏教版高中数学 选择性必修1": "苏教版高中数学 选择性必修1.pdf",
+  "苏教版高中数学 选择性必修2": "苏教版高中数学 选择性必修2.pdf",
+};
 
 const textbookCatalog = [
   {
@@ -170,6 +180,193 @@ function codeFrom(textbook: string, chapter: string, section: string, index: num
   return `${bookCode}-C${chapterNumber.padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`;
 }
 
+function toHalfWidthDigits(value: string) {
+  return value.replace(/[０-９]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0xff10 + 0x30),
+  );
+}
+
+function tidyExerciseText(value: string) {
+  return toHalfWidthDigits(value)
+    .replace(/\r/g, "")
+    .replace(/[]/g, "")
+    .replace(/[ \t　]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n(?=[，。；：、）])/g, "")
+    .replace(/(?<=[（(])\n/g, "")
+    .trim();
+}
+
+function readTextbookPdf(textbook: string) {
+  const fileName = textbookPdfFiles[textbook];
+  if (!fileName) return null;
+
+  const pdfPath = path.join(process.cwd(), fileName);
+  if (!existsSync(pdfPath)) return null;
+
+  try {
+    return execFileSync("pdftotext", ["-enc", "UTF-8", pdfPath, "-"], {
+      encoding: "utf8",
+      maxBuffer: 80 * 1024 * 1024,
+      windowsHide: true,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function pageForIndex(pages: string[], index: number) {
+  return Math.max(1, index + 1);
+}
+
+function findSectionPage(pages: string[], section: string, chapter: string) {
+  const sectionNeedle = section.replace(/\s+/g, "");
+  const chapterNeedle = chapter.replace(/\s+/g, "");
+  const searchablePages = pages.map((page, index) => ({ page, index })).slice(8);
+  const sectionMatch = searchablePages.find(({ page }) =>
+    page.replace(/\s+/g, "").includes(sectionNeedle),
+  );
+
+  if (sectionMatch) return sectionMatch.index;
+
+  const chapterMatch = searchablePages.find(({ page }) =>
+    page.replace(/\s+/g, "").includes(chapterNeedle),
+  );
+
+  return chapterMatch?.index ?? -1;
+}
+
+function extractNumberedExercises(block: string) {
+  const compact = tidyExerciseText(block)
+    .replace(/习题\s*[0-9０-９]+[．.][0-9０-９]+/g, "\n")
+    .replace(/感受\s*[·•]\s*理解|思考\s*[·•]\s*运用|探究\s*[·•]\s*拓展/g, "\n")
+    .replace(/必修第?[一二三四五六七八九十]+册\s*数学|选择性必修第?[一二三四五六七八九十]+册\s*数学/g, "\n");
+  const matches = Array.from(
+    compact.matchAll(/(?:^|\n)\s*([0-9０-９]{1,2})(?:[．.、])\s*/g),
+  );
+
+  return matches
+    .map((match, index) => {
+      const start = match.index ?? 0;
+      const end =
+        index + 1 < matches.length ? matches[index + 1].index ?? compact.length : compact.length;
+      const raw = compact.slice(start, end);
+      return tidyExerciseText(raw).replace(/\s*\f\s*/g, " ");
+    })
+    .filter((prompt) => prompt.length >= 16 && prompt.length <= 700)
+    .filter((prompt) => !/^([0-9]+[．.]\s*)?练\s*习/.test(prompt));
+}
+
+function exercisesFromSectionText(sectionText: string) {
+  const exerciseStart = sectionText.search(/练\s*习|习题\s*[0-9０-９]/);
+  if (exerciseStart < 0) return [];
+
+  const fromExercise = sectionText.slice(exerciseStart);
+  const stop = fromExercise.search(/\n\s*[0-9０-９]+[．.][0-9０-９]+|第[0-9０-９]+章|专题|附录/);
+  const block = stop > 80 ? fromExercise.slice(0, stop) : fromExercise;
+
+  return extractNumberedExercises(block).slice(0, 3);
+}
+
+async function seedFallbackExercise(point: {
+  id: string;
+  code: string;
+  name: string;
+  textbook: string;
+  chapter: string;
+  section: string | null;
+}) {
+  await prisma.textbookExercise.upsert({
+    where: { code: `${point.code}-TB-FALLBACK-01` },
+    update: {
+      textbook: point.textbook,
+      chapter: point.chapter,
+      section: point.section,
+      sourceLabel: "教材练习/习题",
+      prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
+      analysisText: "本题源自本地苏教版教材目录定位；若需自动写入原题，请确认项目根目录保留对应 PDF 并重新运行 npm.cmd run db:seed。",
+      difficulty: 1,
+      knowledgePointId: point.id,
+    },
+    create: {
+      code: `${point.code}-TB-FALLBACK-01`,
+      textbook: point.textbook,
+      chapter: point.chapter,
+      section: point.section,
+      sourceLabel: "教材练习/习题",
+      prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
+      analysisText: "本题源自本地苏教版教材目录定位；若需自动写入原题，请确认项目根目录保留对应 PDF 并重新运行 npm.cmd run db:seed。",
+      difficulty: 1,
+      knowledgePointId: point.id,
+    },
+  });
+}
+
+async function seedTextbookExercises() {
+  const textCache = new Map<string, string[] | null>();
+  const points = await prisma.knowledgePoint.findMany({
+    orderBy: [{ textbook: "asc" }, { chapter: "asc" }, { code: "asc" }],
+  });
+
+  await prisma.textbookExercise.deleteMany();
+
+  for (const point of points) {
+    if (!textCache.has(point.textbook)) {
+      const text = readTextbookPdf(point.textbook);
+      textCache.set(point.textbook, text ? text.split("\f") : null);
+    }
+
+    const pages = textCache.get(point.textbook);
+    if (!pages) {
+      await seedFallbackExercise(point);
+      continue;
+    }
+
+    const startPage = findSectionPage(pages, point.section ?? point.name, point.chapter);
+    if (startPage < 0) {
+      await seedFallbackExercise(point);
+      continue;
+    }
+
+    const windowText = pages.slice(startPage, Math.min(pages.length, startPage + 8)).join("\n");
+    const prompts = exercisesFromSectionText(windowText);
+
+    if (prompts.length === 0) {
+      await seedFallbackExercise(point);
+      continue;
+    }
+
+    for (const [index, prompt] of prompts.entries()) {
+      await prisma.textbookExercise.upsert({
+        where: { code: `${point.code}-TB-${String(index + 1).padStart(2, "0")}` },
+        update: {
+          textbook: point.textbook,
+          chapter: point.chapter,
+          section: point.section,
+          sourcePage: pageForIndex(pages, startPage),
+          sourceLabel: `教材练习 ${index + 1}`,
+          prompt,
+          analysisText: `来源：《${point.textbook}》${point.chapter}${point.section ? ` ${point.section}` : ""}。`,
+          difficulty: index + 1,
+          knowledgePointId: point.id,
+        },
+        create: {
+          code: `${point.code}-TB-${String(index + 1).padStart(2, "0")}`,
+          textbook: point.textbook,
+          chapter: point.chapter,
+          section: point.section,
+          sourcePage: pageForIndex(pages, startPage),
+          sourceLabel: `教材练习 ${index + 1}`,
+          prompt,
+          analysisText: `来源：《${point.textbook}》${point.chapter}${point.section ? ` ${point.section}` : ""}。`,
+          difficulty: index + 1,
+          knowledgePointId: point.id,
+        },
+      });
+    }
+  }
+}
+
 async function main() {
   for (const chapter of textbookCatalog) {
     for (const [index, section] of chapter.sections.entries()) {
@@ -197,6 +394,8 @@ async function main() {
       });
     }
   }
+
+  await seedTextbookExercises();
 
   for (const errorType of errorTypes) {
     await prisma.errorType.upsert({
