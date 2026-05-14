@@ -308,8 +308,6 @@ async function seedTextbookExercises() {
     orderBy: [{ textbook: "asc" }, { chapter: "asc" }, { code: "asc" }],
   });
 
-  await prisma.textbookExercise.deleteMany();
-
   for (const point of points) {
     if (!textCache.has(point.textbook)) {
       const text = readTextbookPdf(point.textbook);

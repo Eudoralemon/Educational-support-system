@@ -25,6 +25,8 @@ export const practicePackStatusLabels: Record<PracticePackStatus, string> = {
 
 export const aiTaskTypeLabels: Record<AiTaskType, string> = {
   OCR: "题图识别",
+  LOCAL_OCR: "本地 OCR",
+  TEXTBOOK_RECOGNITION: "教材识别",
   EXPLANATION_REWRITE: "讲解改写",
   VARIANT_GENERATION: "变式题草稿",
 };

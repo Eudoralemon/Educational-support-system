@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, ClipboardList, Home, LogOut, Upload, UserRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, ClipboardList, Home, LogOut, Upload, UserRound } from "lucide-react";
 import { logoutTeacher } from "@/app/actions";
 import { getCurrentTeacher } from "@/lib/auth";
 import "./globals.css";
@@ -37,6 +37,10 @@ function Sidebar({ teacherName }: { teacherName?: string }) {
         <Link className="nav-link" href="/dashboard#diagnostics">
           <BarChart3 size={18} />
           诊断
+        </Link>
+        <Link className="nav-link" href="/textbooks/recognition">
+          <BookOpenCheck size={18} />
+          教材识别
         </Link>
         {teacherName ? (
           <form action={logoutTeacher}>

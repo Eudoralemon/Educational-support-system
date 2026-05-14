@@ -23,7 +23,7 @@ export default async function NewMistakePage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">录入错题</h1>
-          <p className="page-kicker">上传题图，先存草稿，再进入人工校对。</p>
+          <p className="page-kicker">题干、答案、解析、订正提示都可同时保存文字和图片。</p>
         </div>
       </header>
       <section className="panel">

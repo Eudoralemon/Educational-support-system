@@ -22,8 +22,14 @@ export async function GET(
     where: { imagePath: relativePath, student: { teacherId: teacher.id } },
     select: { imageMimeType: true },
   });
+  const attachment = mistake
+    ? null
+    : await prisma.mistakeAttachment.findFirst({
+        where: { imagePath: relativePath, mistake: { student: { teacherId: teacher.id } } },
+        select: { imageMimeType: true },
+      });
 
-  if (!mistake) {
+  if (!mistake && !attachment) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
@@ -36,7 +42,7 @@ export async function GET(
 
   return new NextResponse(new Uint8Array(file), {
     headers: {
-      "Content-Type": mistake.imageMimeType ?? "application/octet-stream",
+      "Content-Type": mistake?.imageMimeType ?? attachment?.imageMimeType ?? "application/octet-stream",
       "Cache-Control": "private, max-age=3600",
     },
   });

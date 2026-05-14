@@ -1,15 +1,18 @@
-import { AiTaskType, MistakeStatus, Prisma, RegionTag } from "@prisma/client";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { AiTaskType, MistakeAttachmentField, MistakeStatus, Prisma, RegionTag } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAiProvider } from "@/lib/ai";
 import { getCurrentTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { filesFromFormData, maxImagesPerDraftField, saveUploadImage } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 
-const maxImageBytes = 10 * 1024 * 1024;
-const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const draftImageFields = [
+  { field: MistakeAttachmentField.QUESTION, key: "questionImages" },
+  { field: MistakeAttachmentField.ANSWER, key: "answerImages" },
+  { field: MistakeAttachmentField.ANALYSIS, key: "analysisImages" },
+  { field: MistakeAttachmentField.CORRECTION, key: "correctionImages" },
+];
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -36,35 +39,6 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
-async function saveImage(file: File | null) {
-  if (!file || file.size === 0) {
-    return null;
-  }
-
-  if (!allowedImageTypes.has(file.type)) {
-    throw new Error("仅支持 JPG、PNG、WebP 或 GIF 图片");
-  }
-
-  if (file.size > maxImageBytes) {
-    throw new Error("图片不能超过 10MB");
-  }
-
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-
-  const extension = path.extname(file.name) || ".jpg";
-  const fileName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
-  const target = path.join(uploadsDir, fileName);
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  await writeFile(target, bytes);
-
-  return {
-    imagePath: `uploads/${fileName}`,
-    imageMimeType: file.type || "application/octet-stream",
-  };
-}
-
 export async function POST(request: Request) {
   const teacher = await getCurrentTeacher();
   if (!teacher) {
@@ -81,10 +55,44 @@ export async function POST(request: Request) {
     return jsonError("学生不存在", 404);
   }
 
-  const file = formData.get("image");
-  let image: Awaited<ReturnType<typeof saveImage>>;
+  const legacyImage = formData.get("image");
+  const filesByField = new Map<MistakeAttachmentField, File[]>();
+  for (const draftField of draftImageFields) {
+    filesByField.set(draftField.field, filesFromFormData(formData, draftField.key));
+  }
+  if (legacyImage instanceof File && legacyImage.size > 0) {
+    filesByField.set(MistakeAttachmentField.QUESTION, [
+      legacyImage,
+      ...(filesByField.get(MistakeAttachmentField.QUESTION) ?? []),
+    ]);
+  }
+
+  for (const [field, files] of filesByField) {
+    if (files.length > maxImagesPerDraftField) {
+      return jsonError(`${field} 图片最多上传 ${maxImagesPerDraftField} 张`, 400);
+    }
+  }
+
+  const savedAttachments: Array<{
+    field: MistakeAttachmentField;
+    imagePath: string;
+    imageMimeType: string;
+    originalName?: string;
+    order: number;
+  }> = [];
   try {
-    image = await saveImage(file instanceof File ? file : null);
+    for (const [field, files] of filesByField) {
+      for (const [index, file] of files.entries()) {
+        const saved = await saveUploadImage(file);
+        savedAttachments.push({
+          field,
+          imagePath: saved.imagePath,
+          imageMimeType: saved.imageMimeType,
+          originalName: saved.originalName,
+          order: index + 1,
+        });
+      }
+    }
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "图片上传失败", 400);
   }
@@ -102,40 +110,51 @@ export async function POST(request: Request) {
     : null;
   const sourceYear = Number.parseInt(asString(formData.get("sourceYear")), 10);
   const questionText = asString(formData.get("questionText"));
+  const answerText = asString(formData.get("answerText"));
+  const analysisText = asString(formData.get("analysisText"));
+  const correctionNote = asString(formData.get("correctionNote"));
 
-  if (!image && !questionText) {
-    return jsonError("请至少上传题图或填写题干", 400);
+  if (savedAttachments.length === 0 && !questionText && !answerText && !analysisText && !correctionNote) {
+    return jsonError("请至少上传图片或填写一段草稿文字", 400);
   }
 
   if (errorTypeId && !errorType) {
     return jsonError("错误类型不存在", 400);
   }
 
+  const legacyQuestionImage = savedAttachments.find(
+    (attachment) => attachment.field === MistakeAttachmentField.QUESTION,
+  );
   const mistake = await prisma.mistake.create({
     data: {
       studentId: student.id,
       questionText: questionText || null,
-      answerText: asString(formData.get("answerText")) || null,
-      analysisText: asString(formData.get("analysisText")) || null,
+      answerText: answerText || null,
+      analysisText: analysisText || null,
+      correctionNote: correctionNote || null,
       questionType: asString(formData.get("questionType")) || null,
       sourceYear: Number.isFinite(sourceYear) ? sourceYear : null,
       regionTag: RegionTag.JS,
       errorTypeId,
       status: MistakeStatus.DRAFT,
-      imagePath: image?.imagePath,
-      imageMimeType: image?.imageMimeType,
+      imagePath: legacyQuestionImage?.imagePath,
+      imageMimeType: legacyQuestionImage?.imageMimeType,
       knowledgeLinks: {
         create: validKnowledgePoints.map((point) => ({ knowledgePointId: point.id })),
+      },
+      attachments: {
+        create: savedAttachments,
       },
     },
   });
 
   const provider = getAiProvider();
   const aiResult = await provider.createDraft(AiTaskType.OCR, {
-    mistakeId: mistake.id,
-    imagePath: image?.imagePath,
-    questionText: mistake.questionText,
-  } satisfies Prisma.InputJsonObject);
+      mistakeId: mistake.id,
+      imagePath: legacyQuestionImage?.imagePath,
+      attachmentCount: savedAttachments.length,
+      questionText: mistake.questionText,
+    } satisfies Prisma.InputJsonObject);
 
   const aiTask = await prisma.aiTask.create({
     data: {
@@ -144,7 +163,8 @@ export async function POST(request: Request) {
       provider: aiResult.provider,
       mistakeId: mistake.id,
       inputJson: {
-        imagePath: image?.imagePath,
+        imagePath: legacyQuestionImage?.imagePath,
+        attachmentCount: savedAttachments.length,
         questionText: mistake.questionText,
       },
       outputJson: aiResult.outputJson,

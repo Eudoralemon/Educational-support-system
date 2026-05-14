@@ -458,6 +458,91 @@ textarea.compact {
   top: 18px;
 }
 
+.draft-field-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.draft-field {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.draft-field .item-top label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.draft-upload {
+  cursor: pointer;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.draft-attachments {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+
+.attachment-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.attachment-thumb {
+  aspect-ratio: 4 / 3;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.attachment-thumb img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.attachment-delete {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+}
+
+.draft-preview-block {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.legacy-attachment {
+  display: grid;
+  gap: 6px;
+}
+
+.legacy-attachment img {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: 360px;
+  object-fit: contain;
+  width: 100%;
+}
+
 .knowledge-selector {
   display: grid;
   gap: 10px;
@@ -714,6 +799,12 @@ textarea.compact {
 
 .preserve-lines {
   white-space: pre-wrap;
+}
+
+.compact-text {
+  margin: 0;
+  max-height: 150px;
+  overflow: auto;
 }
 
 @media (max-width: 920px) {

@@ -3,6 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, FolderOpen, Save } from "lucide-react";
+import {
+  DraftAttachmentManager,
+  type DraftAttachment,
+  type DraftField,
+} from "@/components/DraftAttachmentManager";
 import { KnowledgePointSelector, type KnowledgePointOption } from "@/components/KnowledgePointSelector";
 
 type ReviewMistake = {
@@ -23,14 +28,30 @@ type ErrorTypeOption = {
   name: string;
 };
 
+const draftSections: Array<{
+  field: DraftField;
+  label: string;
+  textName: "questionText" | "answerText" | "analysisText" | "correctionNote";
+  valueKey: keyof Pick<ReviewMistake, "questionText" | "answerText" | "analysisText" | "correctionNote">;
+}> = [
+  { field: "QUESTION", label: "题干", textName: "questionText", valueKey: "questionText" },
+  { field: "ANSWER", label: "答案", textName: "answerText", valueKey: "answerText" },
+  { field: "ANALYSIS", label: "解析", textName: "analysisText", valueKey: "analysisText" },
+  { field: "CORRECTION", label: "错因与订正提示", textName: "correctionNote", valueKey: "correctionNote" },
+];
+
 export function ReviewForm({
   mistake,
   knowledgePoints,
   errorTypes,
+  attachments,
+  legacyQuestionImageUrl,
 }: {
   mistake: ReviewMistake;
   knowledgePoints: KnowledgePointOption[];
   errorTypes: ErrorTypeOption[];
+  attachments: Record<DraftField, DraftAttachment[]>;
+  legacyQuestionImageUrl?: string | null;
 }) {
   const router = useRouter();
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>(mistake.knowledgePointIds);
@@ -97,25 +118,32 @@ export function ReviewForm({
         </div>
       </div>
 
-      <div className="field">
-        <label htmlFor="questionText">题干</label>
-        <textarea className="textarea" id="questionText" name="questionText" defaultValue={mistake.questionText ?? ""} />
-      </div>
-
-      <div className="form-grid two">
-        <div className="field">
-          <label htmlFor="answerText">答案</label>
-          <textarea className="textarea" id="answerText" name="answerText" defaultValue={mistake.answerText ?? ""} />
-        </div>
-        <div className="field">
-          <label htmlFor="analysisText">解析</label>
-          <textarea className="textarea" id="analysisText" name="analysisText" defaultValue={mistake.analysisText ?? ""} />
-        </div>
-      </div>
-
-      <div className="field">
-        <label htmlFor="correctionNote">错因与订正提示</label>
-        <textarea className="textarea" id="correctionNote" name="correctionNote" defaultValue={mistake.correctionNote ?? ""} />
+      <div className="draft-field-grid">
+        {draftSections.map((section) => (
+          <section className="draft-field" key={section.field}>
+            <div className="field">
+              <label htmlFor={section.textName}>{section.label}</label>
+              <textarea
+                className="textarea"
+                id={section.textName}
+                name={section.textName}
+                defaultValue={mistake[section.valueKey] ?? ""}
+              />
+            </div>
+            {section.field === "QUESTION" && legacyQuestionImageUrl ? (
+              <div className="legacy-attachment">
+                <span className="muted">旧版题图</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt="旧版题图" src={legacyQuestionImageUrl} />
+              </div>
+            ) : null}
+            <DraftAttachmentManager
+              field={section.field}
+              initialAttachments={attachments[section.field] ?? []}
+              mistakeId={mistake.id}
+            />
+          </section>
+        ))}
       </div>
 
       <div className="form-grid two">

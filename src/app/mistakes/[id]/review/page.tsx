@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Bot, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { Bot, CheckCircle2, ScanText } from "lucide-react";
+import { MistakeAttachmentField } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { MistakeRecognitionPanel } from "@/components/MistakeRecognitionPanel";
 import { ReviewForm } from "@/components/ReviewForm";
 import { ReviewCompletionForm } from "@/components/ReviewCompletionForm";
 import { requireTeacher } from "@/lib/auth";
@@ -13,6 +15,7 @@ import {
   mistakeStatusLabels,
   reviewResultLabels,
 } from "@/lib/labels";
+import { uploadUrl } from "@/lib/uploads";
 
 function toDateInput(value: Date | null) {
   const date = value ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -33,6 +36,12 @@ export default async function ReviewMistakePage({
         student: true,
         errorType: true,
         knowledgeLinks: true,
+        attachments: { orderBy: [{ field: "asc" }, { order: "asc" }, { createdAt: "asc" }] },
+        textbookMatches: {
+          include: { knowledgePoint: true, textbookExercise: true },
+          orderBy: [{ status: "asc" }, { score: "desc" }, { createdAt: "desc" }],
+          take: 5,
+        },
         aiTasks: { orderBy: { createdAt: "desc" } },
         reviewRecords: { orderBy: { reviewedAt: "desc" }, take: 6 },
       },
@@ -50,6 +59,47 @@ export default async function ReviewMistakePage({
 
   const imageUrl = mistake.imagePath
     ? `/api/uploads/${encodeURIComponent(mistake.imagePath.replace("uploads/", ""))}`
+    : null;
+  const attachments = {
+    QUESTION: mistake.attachments
+      .filter((attachment) => attachment.field === MistakeAttachmentField.QUESTION)
+      .map((attachment) => ({
+        id: attachment.id,
+        field: attachment.field,
+        url: uploadUrl(attachment.imagePath),
+        originalName: attachment.originalName,
+        order: attachment.order,
+      })),
+    ANSWER: mistake.attachments
+      .filter((attachment) => attachment.field === MistakeAttachmentField.ANSWER)
+      .map((attachment) => ({
+        id: attachment.id,
+        field: attachment.field,
+        url: uploadUrl(attachment.imagePath),
+        originalName: attachment.originalName,
+        order: attachment.order,
+      })),
+    ANALYSIS: mistake.attachments
+      .filter((attachment) => attachment.field === MistakeAttachmentField.ANALYSIS)
+      .map((attachment) => ({
+        id: attachment.id,
+        field: attachment.field,
+        url: uploadUrl(attachment.imagePath),
+        originalName: attachment.originalName,
+        order: attachment.order,
+      })),
+    CORRECTION: mistake.attachments
+      .filter((attachment) => attachment.field === MistakeAttachmentField.CORRECTION)
+      .map((attachment) => ({
+        id: attachment.id,
+        field: attachment.field,
+        url: uploadUrl(attachment.imagePath),
+        originalName: attachment.originalName,
+        order: attachment.order,
+      })),
+  };
+  const legacyQuestionImageUrl = mistake.imagePath && !mistake.attachments.some((attachment) => attachment.imagePath === mistake.imagePath)
+    ? imageUrl
     : null;
 
   return (
@@ -100,21 +150,39 @@ export default async function ReviewMistakePage({
               id: type.id,
               name: type.name,
             }))}
+            attachments={attachments}
+            legacyQuestionImageUrl={legacyQuestionImageUrl}
           />
         </div>
 
         <aside className="grid">
           <section className="panel">
             <h2 className="panel-title">
-              <ImageIcon size={18} />
-              题图
+              <ScanText size={18} />
+              教材识别
             </h2>
-            {imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img alt="错题题图" className="image-preview" src={imageUrl} />
-            ) : (
-              <div className="empty">没有上传题图。</div>
-            )}
+            <MistakeRecognitionPanel
+              initialMatches={mistake.textbookMatches.map((match) => ({
+                id: match.id,
+                score: match.score,
+                status: match.status,
+                reason: match.reason,
+                textbook: match.textbook,
+                chapter: match.chapter,
+                section: match.section,
+                sourcePage: match.sourcePage,
+                sourceLabel: match.sourceLabel,
+                knowledgePoint: match.knowledgePoint
+                  ? {
+                      id: match.knowledgePoint.id,
+                      name: match.knowledgePoint.name,
+                      module: match.knowledgePoint.module,
+                    }
+                  : null,
+                prompt: match.textbookExercise?.prompt ?? "",
+              }))}
+              mistakeId={mistake.id}
+            />
           </section>
 
           {mistake.status === "REVIEWED" ? (

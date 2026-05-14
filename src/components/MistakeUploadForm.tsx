@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload } from "lucide-react";
+import { ImagePlus, Save, Upload } from "lucide-react";
 import { KnowledgePointSelector, type KnowledgePointOption } from "@/components/KnowledgePointSelector";
 
 type StudentOption = {
@@ -17,6 +17,37 @@ type ErrorTypeOption = {
   name: string;
 };
 
+const draftFields = [
+  {
+    id: "question",
+    label: "题干草稿",
+    textName: "questionText",
+    imageName: "questionImages",
+    placeholder: "可先留空，进入校对页后补全。",
+  },
+  {
+    id: "answer",
+    label: "答案草稿",
+    textName: "answerText",
+    imageName: "answerImages",
+    placeholder: "可粘贴答案文字，也可以拍照上传。",
+  },
+  {
+    id: "analysis",
+    label: "解析草稿",
+    textName: "analysisText",
+    imageName: "analysisImages",
+    placeholder: "可保存解析步骤、讲义截图或参考答案。",
+  },
+  {
+    id: "correction",
+    label: "订正提示",
+    textName: "correctionNote",
+    imageName: "correctionImages",
+    placeholder: "记录错因、下次提醒或学生订正图。",
+  },
+];
+
 export function MistakeUploadForm({
   students,
   knowledgePoints,
@@ -28,7 +59,7 @@ export function MistakeUploadForm({
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
-  const [imagePreview, setImagePreview] = useState("");
+  const [previews, setPreviews] = useState<Record<string, string[]>>({});
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
   const defaultStudent = students[0];
@@ -61,14 +92,12 @@ export function MistakeUploadForm({
     });
   }
 
-  function previewImage(fileList: FileList | null) {
-    const file = fileList?.[0];
-    if (!file) {
-      setImagePreview("");
-      return;
-    }
-
-    setImagePreview(URL.createObjectURL(file));
+  function previewImages(fieldId: string, fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    setPreviews((current) => ({
+      ...current,
+      [fieldId]: files.map((file) => URL.createObjectURL(file)),
+    }));
   }
 
   if (students.length === 0) {
@@ -78,23 +107,20 @@ export function MistakeUploadForm({
   return (
     <form action={handleSubmit} className="split-workspace">
       <aside className="preview-panel">
-        <div className="field">
-          <label htmlFor="image">题目图片</label>
-          <input
-            className="input"
-            id="image"
-            name="image"
-            onChange={(event) => previewImage(event.target.files)}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-          />
-        </div>
-        {imagePreview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="题目图片预览" className="image-preview" src={imagePreview} />
-        ) : (
-          <div className="empty">可先保存题干文字，也可以上传题图后进入校对。</div>
-        )}
+        <div className="empty">四个草稿区都可以同时保存文字和图片；图片会在校对页继续追加或删除。</div>
+        {draftFields.map((field) => (
+          <div className="draft-preview-block" key={field.id}>
+            <strong>{field.label}</strong>
+            <div className="attachment-grid compact">
+              {(previews[field.id] ?? []).map((src, index) => (
+                <div className="attachment-thumb" key={src}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img alt={`${field.label}预览 ${index + 1}`} src={src} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </aside>
 
       <div className="form-grid">
@@ -134,20 +160,33 @@ export function MistakeUploadForm({
           </div>
         </div>
 
-        <div className="field">
-          <label htmlFor="questionText">题干草稿</label>
-          <textarea className="textarea" id="questionText" name="questionText" placeholder="可先留空，进入校对页后补全。" />
-        </div>
-
-        <div className="form-grid two">
-          <div className="field">
-            <label htmlFor="answerText">答案草稿</label>
-            <textarea className="textarea" id="answerText" name="answerText" />
-          </div>
-          <div className="field">
-            <label htmlFor="analysisText">解析草稿</label>
-            <textarea className="textarea" id="analysisText" name="analysisText" />
-          </div>
+        <div className="draft-field-grid">
+          {draftFields.map((field) => (
+            <section className="draft-field" key={field.id}>
+              <div className="item-top">
+                <label htmlFor={field.textName}>{field.label}</label>
+                <label className="button secondary draft-upload">
+                  <ImagePlus size={16} />
+                  上传图片
+                  <input
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    hidden
+                    id={`${field.id}Images`}
+                    multiple
+                    name={field.imageName}
+                    onChange={(event) => previewImages(field.id, event.target.files)}
+                    type="file"
+                  />
+                </label>
+              </div>
+              <textarea
+                className="textarea"
+                id={field.textName}
+                name={field.textName}
+                placeholder={field.placeholder}
+              />
+            </section>
+          ))}
         </div>
 
         <div className="field">

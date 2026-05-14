@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 function asAiTaskType(value: unknown): AiTaskType {
   if (
     value === "OCR" ||
+    value === "LOCAL_OCR" ||
+    value === "TEXTBOOK_RECOGNITION" ||
     value === "EXPLANATION_REWRITE" ||
     value === "VARIANT_GENERATION"
   ) {

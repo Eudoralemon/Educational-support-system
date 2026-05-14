@@ -156,3 +156,85 @@ export async function completeMistakeReview(formData: FormData) {
   revalidatePath(`/diagnostics/student/${review.studentId}`);
   revalidatePath(`/mistakes/${mistakeId}/review`);
 }
+
+export async function confirmTextbookCandidate(formData: FormData) {
+  await requireTeacherId();
+  const candidateId = getString(formData, "candidateId");
+  const knowledgePointId = getString(formData, "knowledgePointId");
+  const prompt = getString(formData, "prompt");
+  const answerText = getString(formData, "answerText");
+  const analysisText = getString(formData, "analysisText");
+
+  if (!candidateId || !knowledgePointId || !prompt) return;
+
+  const [candidate, knowledgePoint] = await Promise.all([
+    prisma.textbookExerciseCandidate.findUnique({
+      where: { id: candidateId },
+      include: { textbookExercise: true },
+    }),
+    prisma.knowledgePoint.findUnique({ where: { id: knowledgePointId } }),
+  ]);
+
+  if (!candidate || !knowledgePoint) return;
+
+  const code =
+    candidate.textbookExercise?.code ??
+    `${knowledgePoint.code}-TB-MANUAL-${String(candidate.sourcePage ?? 0).padStart(3, "0")}-${candidate.id.slice(-4)}`;
+  const exercise = await prisma.textbookExercise.upsert({
+    where: { code },
+    update: {
+      textbook: candidate.textbook,
+      chapter: candidate.chapter,
+      section: candidate.section,
+      sourcePage: candidate.sourcePage,
+      sourceLabel: candidate.sourceLabel,
+      prompt,
+      answerText: answerText || null,
+      analysisText: analysisText || null,
+      knowledgePointId: knowledgePoint.id,
+    },
+    create: {
+      code,
+      textbook: candidate.textbook,
+      chapter: candidate.chapter,
+      section: candidate.section,
+      sourcePage: candidate.sourcePage,
+      sourceLabel: candidate.sourceLabel,
+      prompt,
+      answerText: answerText || null,
+      analysisText: analysisText || null,
+      difficulty: 2,
+      knowledgePointId: knowledgePoint.id,
+    },
+  });
+
+  await prisma.textbookExerciseCandidate.update({
+    where: { id: candidate.id },
+    data: {
+      prompt,
+      answerText: answerText || null,
+      analysisText: analysisText || null,
+      confidence: 88,
+      accepted: true,
+      rejected: false,
+      knowledgePointId: knowledgePoint.id,
+      textbookExerciseId: exercise.id,
+      reason: "教师人工确认",
+    },
+  });
+
+  revalidatePath("/textbooks/recognition");
+}
+
+export async function rejectTextbookCandidate(formData: FormData) {
+  await requireTeacherId();
+  const candidateId = getString(formData, "candidateId");
+  if (!candidateId) return;
+
+  await prisma.textbookExerciseCandidate.update({
+    where: { id: candidateId },
+    data: { rejected: true, accepted: false },
+  });
+
+  revalidatePath("/textbooks/recognition");
+}
