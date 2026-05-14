@@ -2,9 +2,17 @@ import Link from "next/link";
 import { Bot, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { ReviewForm } from "@/components/ReviewForm";
+import { ReviewCompletionForm } from "@/components/ReviewCompletionForm";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { aiTaskStatusLabels, aiTaskTypeLabels, formatDate, mistakeStatusLabels } from "@/lib/labels";
+import {
+  aiTaskStatusLabels,
+  aiTaskTypeLabels,
+  formatDate,
+  formatDay,
+  mistakeStatusLabels,
+  reviewResultLabels,
+} from "@/lib/labels";
 
 function toDateInput(value: Date | null) {
   const date = value ?? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -26,6 +34,7 @@ export default async function ReviewMistakePage({
         errorType: true,
         knowledgeLinks: true,
         aiTasks: { orderBy: { createdAt: "desc" } },
+        reviewRecords: { orderBy: { reviewedAt: "desc" }, take: 6 },
       },
     }),
     prisma.knowledgePoint.findMany({
@@ -105,6 +114,45 @@ export default async function ReviewMistakePage({
               <img alt="错题题图" className="image-preview" src={imageUrl} />
             ) : (
               <div className="empty">没有上传题图。</div>
+            )}
+          </section>
+
+          {mistake.status === "REVIEWED" ? (
+            <section className="panel">
+              <h2 className="panel-title">
+                <CheckCircle2 size={18} />
+                完成一次复习
+              </h2>
+              <ReviewCompletionForm mistakeId={mistake.id} />
+              <p className="muted">
+                当前窗口：{mistake.reviewDueAt ? formatDay(mistake.reviewDueAt) : "假期集中或待计算"}
+              </p>
+            </section>
+          ) : null}
+
+          <section className="panel">
+            <h2 className="panel-title">
+              <CheckCircle2 size={18} />
+              复习记录
+            </h2>
+            {mistake.reviewRecords.length === 0 ? (
+              <div className="empty">暂无复习记录。</div>
+            ) : (
+              <div className="list">
+                {mistake.reviewRecords.map((record) => (
+                  <div className="list-item" key={record.id}>
+                    <div className="item-top">
+                      <strong>{reviewResultLabels[record.result]}</strong>
+                      <span className="badge gray">{record.scoreAfter ?? 50} 分</span>
+                    </div>
+                    <span className="muted">
+                      {formatDate(record.reviewedAt)}
+                      {record.nextReviewAt ? ` · 下次窗口 ${formatDay(record.nextReviewAt)}` : ""}
+                    </span>
+                    {record.note ? <span className="muted">{record.note}</span> : null}
+                  </div>
+                ))}
+              </div>
             )}
           </section>
 

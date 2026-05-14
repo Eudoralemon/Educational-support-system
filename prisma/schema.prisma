@@ -34,11 +34,30 @@ enum PracticePackStatus {
   CONFIRMED
 }
 
+enum ReviewTermMode {
+  TERM
+  HOLIDAY
+}
+
+enum ReviewCadence {
+  WEEKLY_WEEKEND
+  BIWEEKLY_WEEKEND
+  MONTHLY_WEEKEND
+  HOLIDAY_ONLY
+}
+
+enum ReviewResult {
+  FORGOT
+  PARTIAL
+  MASTERED
+}
+
 model Teacher {
   id            String         @id @default(cuid())
   name          String
   phone         String?        @unique
   email         String?        @unique
+  reviewTermMode ReviewTermMode @default(TERM)
   students      Student[]
   practicePacks PracticePack[]
   createdAt     DateTime       @default(now())
@@ -52,10 +71,14 @@ model Student {
   school        String?
   province      String         @default("江苏")
   textbookTrack String         @default("苏教版")
+  reviewCadence ReviewCadence  @default(WEEKLY_WEEKEND)
+  reviewBatchSize Int          @default(8)
   teacherId     String
   teacher       Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   mistakes      Mistake[]
   practicePacks PracticePack[]
+  mastery       KnowledgeMastery[]
+  reviewRecords ReviewRecord[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -78,6 +101,7 @@ model KnowledgePoint {
   mistakeLinks  MistakeKnowledgePoint[]
   textbookItems TextbookExercise[]
   practiceItems PracticeItem[]
+  mastery       KnowledgeMastery[]
   createdAt     DateTime                @default(now())
 
   @@index([module])
@@ -134,6 +158,7 @@ model Mistake {
   knowledgeLinks  MistakeKnowledgePoint[]
   practiceItems   PracticeItem[]
   aiTasks         AiTask[]
+  reviewRecords   ReviewRecord[]
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   reviewedAt      DateTime?
@@ -208,4 +233,43 @@ model AiTask {
 
   @@index([mistakeId])
   @@index([status])
+}
+
+model KnowledgeMastery {
+  id               String          @id @default(cuid())
+  studentId        String
+  student          Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  knowledgePointId String
+  knowledgePoint   KnowledgePoint  @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+  score            Int             @default(50)
+  masteredStreak   Int             @default(0)
+  forgotCount      Int             @default(0)
+  reviewedAt       DateTime?
+  nextReviewAt     DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([studentId, knowledgePointId])
+  @@index([studentId])
+  @@index([knowledgePointId])
+  @@index([nextReviewAt])
+}
+
+model ReviewRecord {
+  id           String       @id @default(cuid())
+  studentId    String
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mistakeId    String
+  mistake      Mistake      @relation(fields: [mistakeId], references: [id], onDelete: Cascade)
+  result       ReviewResult
+  note         String?
+  scoreAfter   Int?
+  reviewedAt   DateTime     @default(now())
+  nextReviewAt DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@index([studentId])
+  @@index([mistakeId])
+  @@index([reviewedAt])
+  @@index([nextReviewAt])
 }

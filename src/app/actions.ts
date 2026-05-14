@@ -3,12 +3,54 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { ReviewCadence, ReviewResult, ReviewTermMode } from "@prisma/client";
 import { teacherCookieName } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { recordMistakeReview } from "@/lib/review";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function requireTeacherId() {
+  const cookieStore = await cookies();
+  const teacherId = cookieStore.get(teacherCookieName)?.value;
+
+  if (!teacherId) {
+    redirect("/login");
+  }
+
+  return teacherId;
+}
+
+function asReviewTermMode(value: string): ReviewTermMode {
+  return value === ReviewTermMode.HOLIDAY ? ReviewTermMode.HOLIDAY : ReviewTermMode.TERM;
+}
+
+function asReviewCadence(value: string): ReviewCadence {
+  if (
+    value === ReviewCadence.WEEKLY_WEEKEND ||
+    value === ReviewCadence.BIWEEKLY_WEEKEND ||
+    value === ReviewCadence.MONTHLY_WEEKEND ||
+    value === ReviewCadence.HOLIDAY_ONLY
+  ) {
+    return value;
+  }
+
+  return ReviewCadence.WEEKLY_WEEKEND;
+}
+
+function asReviewResult(value: string): ReviewResult {
+  if (
+    value === ReviewResult.FORGOT ||
+    value === ReviewResult.PARTIAL ||
+    value === ReviewResult.MASTERED
+  ) {
+    return value;
+  }
+
+  return ReviewResult.PARTIAL;
 }
 
 export async function loginTeacher(formData: FormData) {
@@ -43,12 +85,7 @@ export async function logoutTeacher() {
 }
 
 export async function createStudent(formData: FormData) {
-  const cookieStore = await cookies();
-  const teacherId = cookieStore.get(teacherCookieName)?.value;
-
-  if (!teacherId) {
-    redirect("/login");
-  }
+  const teacherId = await requireTeacherId();
 
   const name = getString(formData, "name");
   if (!name) return;
@@ -65,4 +102,57 @@ export async function createStudent(formData: FormData) {
   });
 
   revalidatePath("/dashboard");
+}
+
+export async function setTeacherReviewMode(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const reviewTermMode = asReviewTermMode(getString(formData, "reviewTermMode"));
+
+  await prisma.teacher.update({
+    where: { id: teacherId },
+    data: { reviewTermMode },
+  });
+
+  revalidatePath("/dashboard");
+}
+
+export async function updateStudentReviewSettings(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const studentId = getString(formData, "studentId");
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, teacherId },
+    select: { id: true },
+  });
+
+  if (!student) return;
+
+  const batchSize = Number.parseInt(getString(formData, "reviewBatchSize"), 10);
+  await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      reviewCadence: asReviewCadence(getString(formData, "reviewCadence")),
+      reviewBatchSize: Number.isFinite(batchSize) ? Math.min(30, Math.max(3, batchSize)) : 8,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/students/${student.id}`);
+}
+
+export async function completeMistakeReview(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const mistakeId = getString(formData, "mistakeId");
+  const result = asReviewResult(getString(formData, "result"));
+  const note = getString(formData, "note");
+  const review = await recordMistakeReview({
+    teacherId,
+    mistakeId,
+    result,
+    note,
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/students/${review.studentId}`);
+  revalidatePath(`/diagnostics/student/${review.studentId}`);
+  revalidatePath(`/mistakes/${mistakeId}/review`);
 }

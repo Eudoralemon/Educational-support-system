@@ -10,6 +10,8 @@ type KnowledgePointSummary = {
   chapter?: string;
   count: number;
   students?: number;
+  masteryScore?: number;
+  nextReviewAt?: Date | string | null;
 };
 
 type ErrorSummary = {
@@ -60,11 +62,14 @@ export function KnowledgeList({ items }: { items: KnowledgePointSummary[] }) {
         <div className="progress-row" key={item.id}>
           <div className="progress-meta">
             <strong>{item.name}</strong>
-            <span className="badge">{item.count} 次</span>
+            <span className={typeof item.masteryScore === "number" && item.masteryScore < 60 ? "badge orange" : "badge"}>
+              {typeof item.masteryScore === "number" ? `${item.masteryScore} 分` : `${item.count} 次`}
+            </span>
           </div>
           <div className="muted">
             {item.chapter ?? item.module}
             {typeof item.students === "number" ? ` · ${item.students} 名学生` : ""}
+            {item.nextReviewAt ? ` · 窗口 ${formatDay(item.nextReviewAt)}` : ""}
           </div>
           <div className="bar">
             <div className="bar-fill" style={{ width: `${(item.count / max) * 100}%` }} />

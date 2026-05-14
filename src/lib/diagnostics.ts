@@ -1,5 +1,6 @@
 import { MistakeStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ensureStudentMastery, ensureTeacherMastery } from "@/lib/review";
 
 type KnowledgeSummary = {
   id: string;
@@ -11,6 +12,8 @@ type KnowledgeSummary = {
   count: number;
   students: number;
   weight: number;
+  masteryScore?: number;
+  nextReviewAt?: Date | null;
 };
 
 type ErrorSummary = {
@@ -73,6 +76,7 @@ async function getMistakesForDiagnostics(where: {
 
 function summarizeKnowledge(
   mistakes: Awaited<ReturnType<typeof getMistakesForDiagnostics>>,
+  masteryOverlay = new Map<string, { score: number; nextReviewAt: Date | null }>(),
 ) {
   const map = new Map<
     string,
@@ -91,9 +95,9 @@ function summarizeKnowledge(
         existing.studentIds.add(mistake.studentId);
       } else {
         map.set(point.id, {
-          id: point.id,
-          code: point.code,
-          name: point.name,
+        id: point.id,
+        code: point.code,
+        name: point.name,
           module: point.module,
           textbook: point.textbook,
           chapter: point.chapter,
@@ -110,8 +114,14 @@ function summarizeKnowledge(
     .map(({ studentIds, ...item }) => ({
       ...item,
       students: studentIds.size,
+      masteryScore: masteryOverlay.get(item.id)?.score,
+      nextReviewAt: masteryOverlay.get(item.id)?.nextReviewAt,
     }))
-    .sort((a, b) => b.count * 10 + b.weight - (a.count * 10 + a.weight));
+    .sort((a, b) => {
+      const scoreDelta = (a.masteryScore ?? 50) - (b.masteryScore ?? 50);
+      if (scoreDelta !== 0) return scoreDelta;
+      return b.count * 10 + b.weight - (a.count * 10 + a.weight);
+    });
 }
 
 function summarizeErrors(
@@ -152,11 +162,17 @@ function dueMistakes(
 }
 
 export async function getTeacherDiagnostics(teacherId: string) {
-  const [teacher, students, mistakes] = await Promise.all([
+  await ensureTeacherMastery(teacherId);
+
+  const [teacher, students, mistakes, masteries] = await Promise.all([
     prisma.teacher.findUnique({ where: { id: teacherId } }),
     prisma.student.findMany({ where: { teacherId } }),
     getMistakesForDiagnostics({ teacherId }),
+    prisma.knowledgeMastery.findMany({
+      where: { student: { teacherId } },
+    }),
   ]);
+  const masteryOverlay = summarizeMastery(masteries);
 
   return {
     teacher,
@@ -165,7 +181,7 @@ export async function getTeacherDiagnostics(teacherId: string) {
       mistakes: mistakes.length,
       reviewed: mistakes.length,
     },
-    knowledgePoints: summarizeKnowledge(mistakes),
+    knowledgePoints: summarizeKnowledge(mistakes, masteryOverlay),
     errorTypes: summarizeErrors(mistakes),
     trend: toTrend(mistakes),
     dueMistakes: dueMistakes(mistakes),
@@ -173,15 +189,20 @@ export async function getTeacherDiagnostics(teacherId: string) {
 }
 
 export async function getStudentDiagnostics(studentId: string) {
-  const [student, mistakes] = await Promise.all([
+  await ensureStudentMastery(studentId);
+
+  const [student, mistakes, masteries] = await Promise.all([
     prisma.student.findUnique({
       where: { id: studentId },
       include: { teacher: true },
     }),
     getMistakesForDiagnostics({ studentId }),
+    prisma.knowledgeMastery.findMany({ where: { studentId } }),
   ]);
 
-  const repeatedKnowledge = summarizeKnowledge(mistakes).filter(
+  const masteryOverlay = summarizeMastery(masteries);
+  const knowledgePoints = summarizeKnowledge(mistakes, masteryOverlay);
+  const repeatedKnowledge = knowledgePoints.filter(
     (item) => item.count >= 2,
   );
 
@@ -191,10 +212,57 @@ export async function getStudentDiagnostics(studentId: string) {
       mistakes: mistakes.length,
       repeated: repeatedKnowledge.length,
     },
-    knowledgePoints: summarizeKnowledge(mistakes),
+    knowledgePoints,
     repeatedKnowledge,
     errorTypes: summarizeErrors(mistakes),
     trend: toTrend(mistakes),
     dueMistakes: dueMistakes(mistakes),
   };
+}
+
+function summarizeMastery(
+  masteries: {
+    knowledgePointId: string;
+    score: number;
+    nextReviewAt: Date | null;
+  }[],
+) {
+  const map = new Map<
+    string,
+    {
+      scoreTotal: number;
+      count: number;
+      nextReviewAt: Date | null;
+    }
+  >();
+
+  for (const mastery of masteries) {
+    const existing = map.get(mastery.knowledgePointId);
+    if (existing) {
+      existing.scoreTotal += mastery.score;
+      existing.count += 1;
+      if (
+        mastery.nextReviewAt &&
+        (!existing.nextReviewAt || mastery.nextReviewAt < existing.nextReviewAt)
+      ) {
+        existing.nextReviewAt = mastery.nextReviewAt;
+      }
+    } else {
+      map.set(mastery.knowledgePointId, {
+        scoreTotal: mastery.score,
+        count: 1,
+        nextReviewAt: mastery.nextReviewAt,
+      });
+    }
+  }
+
+  return new Map(
+    Array.from(map.entries()).map(([knowledgePointId, value]) => [
+      knowledgePointId,
+      {
+        score: Math.round(value.scoreTotal / value.count),
+        nextReviewAt: value.nextReviewAt,
+      },
+    ]),
+  );
 }

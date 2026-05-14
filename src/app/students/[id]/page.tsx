@@ -1,12 +1,21 @@
 import Link from "next/link";
-import { BarChart3, ClipboardList, Upload } from "lucide-react";
+import { BarChart3, ClipboardList, Settings, Upload } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
+import { updateStudentReviewSettings } from "@/app/actions";
 import { CreatePracticePackButton } from "@/components/CreatePracticePackButton";
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
-import { formatDate, formatDay, mistakeStatusLabels, practicePackStatusLabels } from "@/lib/labels";
+import {
+  formatDate,
+  formatDay,
+  mistakeStatusLabels,
+  practicePackStatusLabels,
+  reviewCadenceLabels,
+  reviewResultLabels,
+} from "@/lib/labels";
+import { getStudentReviewOverview } from "@/lib/review";
 
 export default async function StudentPage({
   params,
@@ -35,7 +44,12 @@ export default async function StudentPage({
   if (!student) notFound();
   if (student.teacherId !== teacher.id) redirect("/dashboard");
 
-  const diagnostics = await getStudentDiagnostics(student.id);
+  const [diagnostics, reviewOverview] = await Promise.all([
+    getStudentDiagnostics(student.id),
+    getStudentReviewOverview(student.id, teacher.id),
+  ]);
+  if (!reviewOverview) notFound();
+  const lowMasteryCount = reviewOverview.masteries.filter((item) => item.score < 60).length;
 
   return (
     <>
@@ -65,12 +79,12 @@ export default async function StudentPage({
           <span className="stat-value">{student.mistakes.length}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">重复薄弱项</span>
-          <span className="stat-value">{diagnostics.repeatedKnowledge.length}</span>
+          <span className="stat-label">低掌握度</span>
+          <span className="stat-value">{lowMasteryCount}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">练习包</span>
-          <span className="stat-value">{student.practicePacks.length}</span>
+          <span className="stat-label">本次复习窗口</span>
+          <span className="stat-value">{reviewOverview.windowTasks.length}</span>
         </div>
       </section>
 
@@ -96,10 +110,12 @@ export default async function StudentPage({
                   <div className="list-item" key={item.id}>
                     <div className="item-top">
                       <strong>{item.name}</strong>
-                      <span className="badge orange">{item.count} 次</span>
+                      <span className={item.masteryScore && item.masteryScore < 60 ? "badge orange" : "badge"}>
+                        {item.masteryScore ?? 50} 分
+                      </span>
                     </div>
                     <span className="muted">
-                      {item.chapter} · 建议配 1 道回顾题和 1 道迁移题
+                      {item.chapter} · 错题 {item.count} 次 · 建议配 1 道回顾题和 1 道迁移题
                     </span>
                   </div>
                 ))}
@@ -165,19 +181,114 @@ export default async function StudentPage({
           <section className="panel" id="review-plan">
             <h2 className="panel-title">
               <ClipboardList size={18} />
-              复习计划
+              本次复习窗口
             </h2>
-            {diagnostics.dueMistakes.length === 0 ? (
-              <div className="empty">暂无到期复习。</div>
+            <form action={updateStudentReviewSettings} className="form-grid compact-form">
+              <input name="studentId" type="hidden" value={student.id} />
+              <div className="form-grid two">
+                <div className="field">
+                  <label htmlFor="reviewCadence">可登录频率</label>
+                  <select
+                    className="select"
+                    id="reviewCadence"
+                    name="reviewCadence"
+                    defaultValue={student.reviewCadence}
+                  >
+                    {Object.entries(reviewCadenceLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="reviewBatchSize">每次题量</label>
+                  <input
+                    className="input"
+                    id="reviewBatchSize"
+                    inputMode="numeric"
+                    name="reviewBatchSize"
+                    defaultValue={student.reviewBatchSize}
+                  />
+                </div>
+              </div>
+              <button className="button secondary" type="submit">
+                <Settings size={18} />
+                保存复习设置
+              </button>
+            </form>
+            <p className="muted">{reviewOverview.windowHint}</p>
+            {reviewOverview.windowTasks.length === 0 ? (
+              <div className="empty">
+                {reviewOverview.pool.length
+                  ? "当前还不是可登录窗口，任务已在待复习池中积累。"
+                  : "暂无需要释放的复习任务。"}
+              </div>
             ) : (
               <div className="list">
-                {diagnostics.dueMistakes.map((item) => (
+                {reviewOverview.windowTasks.map((item) => (
                   <Link className="list-item" href={`/mistakes/${item.id}/review`} key={item.id}>
                     <div className="item-top">
                       <strong>{item.questionText ?? "题图待校对"}</strong>
-                      <span className="badge green">{formatDay(item.reviewDueAt)}</span>
+                      <span className={item.masteryScore < 60 ? "badge orange" : "badge green"}>
+                        {item.masteryScore} 分
+                      </span>
                     </div>
-                    <span className="muted">回看错因后可生成新练习包。</span>
+                    <span className="muted">
+                      {item.reviewDueAt ? `窗口 ${formatDay(item.reviewDueAt)}` : "假期集中释放"}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2 className="panel-title">
+              <BarChart3 size={18} />
+              掌握度
+            </h2>
+            {reviewOverview.masteries.length === 0 ? (
+              <div className="empty">复习后会显示掌握度。</div>
+            ) : (
+              <div className="list">
+                {reviewOverview.masteries.slice(0, 8).map((item) => (
+                  <div className="progress-row" key={item.id}>
+                    <div className="progress-meta">
+                      <strong>{item.knowledgePoint.name}</strong>
+                      <span className={item.score < 60 ? "badge orange" : "badge"}>{item.score} 分</span>
+                    </div>
+                    <div className="muted">
+                      {item.knowledgePoint.chapter}
+                      {item.nextReviewAt ? ` · 窗口 ${formatDay(item.nextReviewAt)}` : ""}
+                    </div>
+                    <div className="bar">
+                      <div className="bar-fill" style={{ width: `${item.score}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2 className="panel-title">
+              <ClipboardList size={18} />
+              复习历史
+            </h2>
+            {reviewOverview.records.length === 0 ? (
+              <div className="empty">暂无复习记录。</div>
+            ) : (
+              <div className="list">
+                {reviewOverview.records.map((record) => (
+                  <Link className="list-item" href={`/mistakes/${record.mistakeId}/review`} key={record.id}>
+                    <div className="item-top">
+                      <strong>{reviewResultLabels[record.result]}</strong>
+                      <span className="badge gray">{record.scoreAfter ?? 50} 分</span>
+                    </div>
+                    <span className="muted">
+                      {record.mistake.questionText ?? "题图待校对"} · {formatDate(record.reviewedAt)}
+                    </span>
                   </Link>
                 ))}
               </div>

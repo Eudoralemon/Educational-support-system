@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { MistakeStatus } from "@prisma/client";
 import { BarChart3, BookOpen, ClipboardList, Plus, Upload, UserRound } from "lucide-react";
-import { createStudent } from "@/app/actions";
+import { createStudent, setTeacherReviewMode } from "@/app/actions";
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
 import { getTeacherDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
-import { formatDate, mistakeStatusLabels, practicePackStatusLabels } from "@/lib/labels";
+import { getTeacherReviewOverview } from "@/lib/review";
+import {
+  formatDate,
+  formatDay,
+  mistakeStatusLabels,
+  practicePackStatusLabels,
+  reviewCadenceLabels,
+  reviewTermModeLabels,
+} from "@/lib/labels";
 
 const textbookNames = [
   "苏教版高中数学 必修第1册",
@@ -17,7 +25,7 @@ const textbookNames = [
 
 export default async function DashboardPage() {
   const teacher = await requireTeacher();
-  const [students, recentMistakes, draftMistakes, draftCount, practicePacks, diagnostics, textbookCount, exerciseCount] =
+  const [students, recentMistakes, draftMistakes, draftCount, practicePacks, diagnostics, reviewOverview, textbookCount, exerciseCount] =
     await Promise.all([
       prisma.student.findMany({
         where: { teacherId: teacher.id },
@@ -48,13 +56,14 @@ export default async function DashboardPage() {
         take: 6,
       }),
       getTeacherDiagnostics(teacher.id),
+      getTeacherReviewOverview(teacher.id),
       prisma.knowledgePoint.count(),
       prisma.textbookExercise.count(),
     ]);
 
   const mistakeCount = students.reduce((sum, item) => sum + item._count.mistakes, 0);
-  const dueCount = diagnostics.dueMistakes.length;
-  const weakPointCount = diagnostics.knowledgePoints.length;
+  const reviewWindowCount = reviewOverview.tasks.length;
+  const lowMasteryCount = reviewOverview.lowMasteries.filter((item) => item.score < 60).length;
 
   return (
     <>
@@ -81,9 +90,9 @@ export default async function DashboardPage() {
           <span className="stat-value">{mistakeCount}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">待校对 / 到期复习</span>
+          <span className="stat-label">待校对 / 本次复习窗口</span>
           <span className="stat-value">
-            {draftCount} / {dueCount}
+            {draftCount} / {reviewWindowCount}
           </span>
         </div>
       </section>
@@ -102,16 +111,49 @@ export default async function DashboardPage() {
                 <span className="muted">先补齐题干、错因和知识点，诊断才会进入统计。</span>
               </div>
               <div className="action-card">
-                <span className="stat-label">到期复习</span>
-                <strong>{dueCount}</strong>
-                <span className="muted">优先安排回看和小题巩固，避免薄弱点沉底。</span>
+                <span className="stat-label">本次复习窗口</span>
+                <strong>{reviewWindowCount}</strong>
+                <span className="muted">
+                  {reviewOverview.windowOpen ? "当前窗口已打开。" : "上学期非周末不释放任务。"}
+                </span>
               </div>
               <div className="action-card">
-                <span className="stat-label">薄弱知识点</span>
-                <strong>{weakPointCount}</strong>
-                <span className="muted">练习包会默认取前 5 个高频薄弱项。</span>
+                <span className="stat-label">低掌握度知识点</span>
+                <strong>{lowMasteryCount}</strong>
+                <span className="muted">低于 60 分会优先进入复习和组卷视野。</span>
               </div>
             </div>
+            <form action={setTeacherReviewMode} className="inline-form" style={{ marginTop: 12 }}>
+              <span className="muted">当前模式</span>
+              <select className="select compact" name="reviewTermMode" defaultValue={teacher.reviewTermMode}>
+                {Object.entries(reviewTermModeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button className="button secondary" type="submit">
+                切换模式
+              </button>
+            </form>
+            {reviewOverview.tasks.length ? (
+              <div className="list" style={{ marginTop: 12 }}>
+                {reviewOverview.tasks.slice(0, 6).map((task) => (
+                  <Link className="list-item" href={`/mistakes/${task.id}/review`} key={task.id}>
+                    <div className="item-top">
+                      <strong>{task.studentName}</strong>
+                      <span className={task.masteryScore < 60 ? "badge orange" : "badge green"}>
+                        {task.masteryScore} 分
+                      </span>
+                    </div>
+                    <span className="muted">
+                      {task.questionText || "题图待校对"} · {reviewCadenceLabels[task.cadence]}
+                      {task.reviewDueAt ? ` · 窗口 ${formatDay(task.reviewDueAt)}` : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
             {draftMistakes.length ? (
               <div className="list" style={{ marginTop: 12 }}>
                 {draftMistakes.map((mistake) => (
@@ -263,6 +305,31 @@ export default async function DashboardPage() {
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="panel">
+            <h2 className="panel-title">
+              <BarChart3 size={18} />
+              掌握度预警
+            </h2>
+            {reviewOverview.lowMasteries.length === 0 ? (
+              <div className="empty">复习后会沉淀知识点掌握度。</div>
+            ) : (
+              <div className="list">
+                {reviewOverview.lowMasteries.slice(0, 6).map((item) => (
+                  <Link className="list-item" href={`/students/${item.studentId}`} key={item.id}>
+                    <div className="item-top">
+                      <strong>{item.knowledgePoint.name}</strong>
+                      <span className={item.score < 60 ? "badge orange" : "badge"}>{item.score} 分</span>
+                    </div>
+                    <span className="muted">
+                      {item.student.name} · {item.knowledgePoint.chapter}
+                      {item.nextReviewAt ? ` · 窗口 ${formatDay(item.nextReviewAt)}` : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
 
           <DiagnosticPanel
