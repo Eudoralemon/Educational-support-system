@@ -247,6 +247,10 @@ textarea {
   gap: 10px;
 }
 
+.button-row.compact {
+  gap: 6px;
+}
+
 .button {
   align-items: center;
   background: var(--brand);
@@ -285,6 +289,32 @@ textarea {
 .button[disabled] {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.icon-button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cad5e2;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.icon-button:hover {
+  background: #f8fafc;
+}
+
+.icon-button.danger {
+  color: var(--red);
+}
+
+.icon-button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .table {
@@ -352,6 +382,137 @@ textarea {
   display: flex;
   gap: 10px;
   justify-content: space-between;
+}
+
+.action-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.action-card {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 14px;
+}
+
+.action-card strong {
+  color: var(--ink);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.section-nav a {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+  padding: 8px 10px;
+}
+
+.split-workspace {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.preview-panel {
+  display: grid;
+  gap: 12px;
+  position: sticky;
+  top: 18px;
+}
+
+.knowledge-selector {
+  display: grid;
+  gap: 10px;
+}
+
+.selector-toolbar {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(140px, 1fr));
+}
+
+.search-field {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cad5e2;
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.search-field input {
+  border: 0;
+  color: var(--text);
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  align-items: center;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  color: #3730a3;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 9px;
+}
+
+.knowledge-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.knowledge-option {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+}
+
+.knowledge-option:hover,
+.knowledge-option.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .progress-row {
@@ -436,6 +597,37 @@ textarea {
   padding: 14px;
 }
 
+.print-only {
+  display: none;
+}
+
+.print-heading {
+  align-items: center;
+  border-bottom: 2px solid #111827;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+}
+
+.print-heading h2 {
+  margin: 0;
+}
+
+.print-item {
+  border-bottom: 1px solid #d0d5dd;
+  break-inside: avoid;
+  padding: 14px 0;
+}
+
+.print-item h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.preserve-lines {
+  white-space: pre-wrap;
+}
+
 @media (max-width: 920px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -448,8 +640,15 @@ textarea {
   .grid.two,
   .grid.three,
   .grid.main,
+  .action-grid,
+  .selector-toolbar,
+  .split-workspace,
   .form-grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .preview-panel {
+    position: static;
   }
 
   .page-header {
@@ -482,5 +681,21 @@ textarea {
   .practice-item {
     border-color: #d0d5dd;
     box-shadow: none;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-heading {
+    display: flex !important;
+  }
+
+  .print-mode-student .print-answer {
+    display: none;
+  }
+
+  .print-mode-answers .print-item > p {
+    display: none;
   }
 }

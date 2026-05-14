@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MistakeStatus } from "@prisma/client";
 import { BarChart3, BookOpen, ClipboardList, Plus, Upload, UserRound } from "lucide-react";
 import { createStudent } from "@/app/actions";
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
@@ -16,7 +17,7 @@ const textbookNames = [
 
 export default async function DashboardPage() {
   const teacher = await requireTeacher();
-  const [students, recentMistakes, practicePacks, diagnostics, textbookCount, exerciseCount] =
+  const [students, recentMistakes, draftMistakes, draftCount, practicePacks, diagnostics, textbookCount, exerciseCount] =
     await Promise.all([
       prisma.student.findMany({
         where: { teacherId: teacher.id },
@@ -31,6 +32,15 @@ export default async function DashboardPage() {
         orderBy: { createdAt: "desc" },
         take: 8,
       }),
+      prisma.mistake.findMany({
+        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id } },
+        include: { student: true },
+        orderBy: { createdAt: "asc" },
+        take: 5,
+      }),
+      prisma.mistake.count({
+        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id } },
+      }),
       prisma.practicePack.findMany({
         where: { teacherId: teacher.id },
         include: { student: true, items: true },
@@ -43,6 +53,8 @@ export default async function DashboardPage() {
     ]);
 
   const mistakeCount = students.reduce((sum, item) => sum + item._count.mistakes, 0);
+  const dueCount = diagnostics.dueMistakes.length;
+  const weakPointCount = diagnostics.knowledgePoints.length;
 
   return (
     <>
@@ -69,13 +81,52 @@ export default async function DashboardPage() {
           <span className="stat-value">{mistakeCount}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">教材题源</span>
-          <span className="stat-value">{exerciseCount}</span>
+          <span className="stat-label">待校对 / 到期复习</span>
+          <span className="stat-value">
+            {draftCount} / {dueCount}
+          </span>
         </div>
       </section>
 
       <section className="grid main" style={{ marginTop: 16 }}>
         <div className="grid">
+          <section className="panel">
+            <h2 className="panel-title">
+              <ClipboardList size={18} />
+              今日优先
+            </h2>
+            <div className="action-grid">
+              <div className="action-card">
+                <span className="stat-label">待校对错题</span>
+                <strong>{draftCount}</strong>
+                <span className="muted">先补齐题干、错因和知识点，诊断才会进入统计。</span>
+              </div>
+              <div className="action-card">
+                <span className="stat-label">到期复习</span>
+                <strong>{dueCount}</strong>
+                <span className="muted">优先安排回看和小题巩固，避免薄弱点沉底。</span>
+              </div>
+              <div className="action-card">
+                <span className="stat-label">薄弱知识点</span>
+                <strong>{weakPointCount}</strong>
+                <span className="muted">练习包会默认取前 5 个高频薄弱项。</span>
+              </div>
+            </div>
+            {draftMistakes.length ? (
+              <div className="list" style={{ marginTop: 12 }}>
+                {draftMistakes.map((mistake) => (
+                  <Link className="list-item" href={`/mistakes/${mistake.id}/review`} key={mistake.id}>
+                    <div className="item-top">
+                      <strong>{mistake.student.name}</strong>
+                      <span className="badge orange">待校对</span>
+                    </div>
+                    <span className="muted">{mistake.questionText || "题图待校对"}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
           <section className="panel" id="students">
             <h2 className="panel-title">
               <UserRound size={18} />
@@ -202,7 +253,7 @@ export default async function DashboardPage() {
           <section className="panel">
             <h2 className="panel-title">
               <BookOpen size={18} />
-              教材范围 · {textbookCount} 个知识点
+              教材范围 · {textbookCount} 个知识点 · {exerciseCount} 道题源
             </h2>
             <div className="list">
               {textbookNames.map((name) => (

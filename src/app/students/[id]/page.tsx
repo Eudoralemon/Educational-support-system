@@ -6,7 +6,7 @@ import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { prisma } from "@/lib/db";
-import { formatDate, mistakeStatusLabels } from "@/lib/labels";
+import { formatDate, formatDay, mistakeStatusLabels, practicePackStatusLabels } from "@/lib/labels";
 
 export default async function StudentPage({
   params,
@@ -74,9 +74,40 @@ export default async function StudentPage({
         </div>
       </section>
 
+      <nav className="section-nav" aria-label="学生档案分区">
+        <a href="#mistakes">错题记录</a>
+        <a href="#diagnosis">诊断建议</a>
+        <a href="#review-plan">复习计划</a>
+        <a href="#practice-packs">练习包</a>
+      </nav>
+
       <section className="grid main" style={{ marginTop: 16 }}>
         <div className="grid">
-          <section className="panel">
+          <section className="panel" id="diagnosis">
+            <h2 className="panel-title">
+              <BarChart3 size={18} />
+              教学建议
+            </h2>
+            {diagnostics.knowledgePoints.length === 0 ? (
+              <div className="empty">校对错题后会生成薄弱项建议。</div>
+            ) : (
+              <div className="list">
+                {diagnostics.knowledgePoints.slice(0, 4).map((item) => (
+                  <div className="list-item" key={item.id}>
+                    <div className="item-top">
+                      <strong>{item.name}</strong>
+                      <span className="badge orange">{item.count} 次</span>
+                    </div>
+                    <span className="muted">
+                      {item.chapter} · 建议配 1 道回顾题和 1 道迁移题
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel" id="mistakes">
             <h2 className="panel-title">
               <ClipboardList size={18} />
               错题
@@ -105,7 +136,7 @@ export default async function StudentPage({
             )}
           </section>
 
-          <section className="panel">
+          <section className="panel" id="practice-packs">
             <h2 className="panel-title">
               <ClipboardList size={18} />
               练习包
@@ -120,7 +151,9 @@ export default async function StudentPage({
                       <strong>{pack.title}</strong>
                       <span className="badge gray">{pack.items.length} 题</span>
                     </div>
-                    <span className="muted">{formatDate(pack.createdAt)}</span>
+                    <span className="muted">
+                      {practicePackStatusLabels[pack.status]} · {formatDate(pack.createdAt)}
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -128,12 +161,35 @@ export default async function StudentPage({
           </section>
         </div>
 
-        <DiagnosticPanel
-          knowledgePoints={diagnostics.knowledgePoints}
-          errorTypes={diagnostics.errorTypes}
-          dueMistakes={diagnostics.dueMistakes}
-          trend={diagnostics.trend}
-        />
+        <aside className="grid">
+          <section className="panel" id="review-plan">
+            <h2 className="panel-title">
+              <ClipboardList size={18} />
+              复习计划
+            </h2>
+            {diagnostics.dueMistakes.length === 0 ? (
+              <div className="empty">暂无到期复习。</div>
+            ) : (
+              <div className="list">
+                {diagnostics.dueMistakes.map((item) => (
+                  <Link className="list-item" href={`/mistakes/${item.id}/review`} key={item.id}>
+                    <div className="item-top">
+                      <strong>{item.questionText ?? "题图待校对"}</strong>
+                      <span className="badge green">{formatDay(item.reviewDueAt)}</span>
+                    </div>
+                    <span className="muted">回看错因后可生成新练习包。</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+          <DiagnosticPanel
+            knowledgePoints={diagnostics.knowledgePoints}
+            errorTypes={diagnostics.errorTypes}
+            dueMistakes={diagnostics.dueMistakes}
+            trend={diagnostics.trend}
+          />
+        </aside>
       </section>
     </>
   );

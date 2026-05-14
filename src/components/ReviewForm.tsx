@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save } from "lucide-react";
+import { ArrowRight, FolderOpen, Save } from "lucide-react";
+import { KnowledgePointSelector, type KnowledgePointOption } from "@/components/KnowledgePointSelector";
 
 type ReviewMistake = {
   id: string;
@@ -15,14 +16,6 @@ type ReviewMistake = {
   errorTypeId: string | null;
   reviewDueAt: string;
   knowledgePointIds: string[];
-};
-
-type KnowledgePointOption = {
-  id: string;
-  name: string;
-  module: string;
-  textbook: string;
-  chapter: string;
 };
 
 type ErrorTypeOption = {
@@ -40,25 +33,14 @@ export function ReviewForm({
   errorTypes: ErrorTypeOption[];
 }) {
   const router = useRouter();
-  const [selectedPointIds, setSelectedPointIds] = useState(new Set(mistake.knowledgePointIds));
+  const [selectedPointIds, setSelectedPointIds] = useState<string[]>(mistake.knowledgePointIds);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
-
-  function togglePoint(id: string) {
-    setSelectedPointIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
 
   function handleSubmit(formData: FormData) {
     setMessage("");
     startTransition(async () => {
+      const afterSave = formData.get("afterSave");
       const response = await fetch(`/api/mistakes/${mistake.id}/review`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -71,7 +53,7 @@ export function ReviewForm({
           questionType: formData.get("questionType"),
           errorTypeId: formData.get("errorTypeId"),
           reviewDueAt: formData.get("reviewDueAt"),
-          knowledgePointIds: Array.from(selectedPointIds),
+          knowledgePointIds: selectedPointIds,
         }),
       });
 
@@ -80,7 +62,24 @@ export function ReviewForm({
         return;
       }
 
-      setMessage("已保存并进入诊断统计");
+      const payload = (await response.json()) as {
+        nextReviewUrl?: string | null;
+        studentUrl?: string;
+      };
+
+      if (afterSave === "student" && payload.studentUrl) {
+        router.push(payload.studentUrl);
+        router.refresh();
+        return;
+      }
+
+      if (afterSave === "next" && payload.nextReviewUrl) {
+        router.push(payload.nextReviewUrl);
+        router.refresh();
+        return;
+      }
+
+      setMessage(afterSave === "next" ? "已保存，暂无下一道待校对错题" : "已保存并进入诊断统计");
       router.refresh();
     });
   }
@@ -150,31 +149,29 @@ export function ReviewForm({
 
       <div className="field">
         <label>知识点</label>
-        <div className="grid two">
-          {knowledgePoints.map((point) => (
-            <label className="list-item" key={point.id}>
-              <span className="item-top">
-                <span>{point.name}</span>
-                <input
-                  checked={selectedPointIds.has(point.id)}
-                  onChange={() => togglePoint(point.id)}
-                  type="checkbox"
-                />
-              </span>
-              <span className="muted">
-                {point.textbook} · {point.chapter}
-              </span>
-            </label>
-          ))}
-        </div>
+        <KnowledgePointSelector
+          onChange={setSelectedPointIds}
+          points={knowledgePoints}
+          selectedIds={selectedPointIds}
+        />
       </div>
 
       {message ? <div className="empty">{message}</div> : null}
 
-      <button className="button" disabled={isPending} type="submit">
-        <Save size={18} />
-        {isPending ? "保存中" : "保存校对结果"}
-      </button>
+      <div className="button-row">
+        <button className="button" disabled={isPending} name="afterSave" type="submit" value="stay">
+          <Save size={18} />
+          {isPending ? "保存中" : "保存校对结果"}
+        </button>
+        <button className="button secondary" disabled={isPending} name="afterSave" type="submit" value="next">
+          <ArrowRight size={18} />
+          保存并校对下一题
+        </button>
+        <button className="button secondary" disabled={isPending} name="afterSave" type="submit" value="student">
+          <FolderOpen size={18} />
+          保存后回学生档案
+        </button>
+      </div>
     </form>
   );
 }
