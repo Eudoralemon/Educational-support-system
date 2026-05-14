@@ -2,6 +2,7 @@ import { PracticePackStatus, RegionTag } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { getCurrentTeacher } from "@/lib/auth";
+import { selectExercisesForPracticePack } from "@/lib/exercise-library";
 import { prisma } from "@/lib/db";
 
 function asString(value: unknown) {
@@ -56,75 +57,25 @@ export async function POST(request: Request) {
     return jsonError("暂无可生成练习的知识点", 400);
   }
 
-  const mistakes = await prisma.mistake.findMany({
-    where: {
-      studentId,
-      knowledgeLinks: {
-        some: {
-          knowledgePointId: { in: points.map((point) => point.id) },
-        },
-      },
-    },
-    include: {
-      knowledgeLinks: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
-  const textbookExercises = await prisma.textbookExercise.findMany({
-    where: {
-      knowledgePointId: { in: points.map((point) => point.id) },
-    },
-    orderBy: [{ difficulty: "asc" }, { sourceLabel: "asc" }],
-  });
-  const exercisesByPoint = new Map<string, typeof textbookExercises>();
-
-  for (const exercise of textbookExercises) {
-    const existing = exercisesByPoint.get(exercise.knowledgePointId) ?? [];
-    existing.push(exercise);
-    exercisesByPoint.set(exercise.knowledgePointId, existing);
-  }
-
   const title =
     asString(body.title) ||
     `${student.name} 专项练习 ${new Date().toLocaleDateString("zh-CN")}`;
-  let order = 1;
-  const itemCreates = points.flatMap((point) => {
-    const source = mistakes.find((mistake) =>
-      mistake.knowledgeLinks.some((link) => link.knowledgePointId === point.id),
-    );
-    const exercises = exercisesByPoint.get(point.id)?.slice(0, 2);
-
-    if (!exercises || exercises.length === 0) {
-      return [
-        {
-          order: order++,
-          knowledgePointId: point.id,
-          sourceMistakeId: source?.id,
-          prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
-          answerText: "",
-          analysisText: "教材 PDF 暂未抽取到具体题目；请运行 npm.cmd run db:seed 重新生成本地教材题源。",
-          isAiDraft: false,
-        },
-      ];
-    }
-
-    return exercises.map((exercise) => ({
-      order: order++,
+  const selectedItems = await selectExercisesForPracticePack({
+    teacherId: teacher.id,
+    studentId: student.id,
+    knowledgePointIds: points.map((point) => point.id),
+  });
+  const fallbackItems = points
+    .filter((point) => !selectedItems.some((item) => item.knowledgePointId === point.id))
+    .map((point, index) => ({
+      order: selectedItems.length + index + 1,
       knowledgePointId: point.id,
-      textbookExerciseId: exercise.id,
-      sourceMistakeId: source?.id,
-      prompt: `【${point.name} · ${exercise.sourceLabel}】\n${exercise.prompt}`,
-      answerText: exercise.answerText ?? "",
-      analysisText: [
-        exercise.analysisText,
-        source?.analysisText ? `关联错因：${source.analysisText}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
+      answerText: "",
+      analysisText: "教材 PDF 暂未抽取到具体题目；请运行 npm.cmd run db:seed 重新生成本地教材题源。",
       isAiDraft: false,
     }));
-  });
+  const itemCreates = [...selectedItems, ...fallbackItems];
 
   const pack = await prisma.practicePack.create({
     data: {
@@ -137,7 +88,26 @@ export async function POST(request: Request) {
         create: itemCreates,
       },
     },
+    include: { items: true },
   });
+
+  const usageCreates = pack.items
+    .filter((item) => item.textbookExerciseId)
+    .map((item) =>
+      prisma.textbookExerciseUsage.create({
+        data: {
+          teacherId: teacher.id,
+          studentId: student.id,
+          packId: pack.id,
+          practiceItemId: item.id,
+          textbookExerciseId: item.textbookExerciseId!,
+        },
+      }),
+    );
+
+  if (usageCreates.length) {
+    await prisma.$transaction(usageCreates);
+  }
 
   return NextResponse.json({ id: pack.id });
 }

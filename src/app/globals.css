@@ -536,6 +536,73 @@ textarea.compact {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
+.library-panel {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.library-panel h3 {
+  margin: 0;
+}
+
+.segmented {
+  background: #eef2f6;
+  border-radius: 8px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+}
+
+.segment {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 750;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.segment.active {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.library-list {
+  display: grid;
+  gap: 10px;
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.library-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.library-card.disabled {
+  opacity: 0.62;
+}
+
+.library-card p {
+  margin: 0;
+  max-height: 88px;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
 .progress-row {
   display: grid;
   gap: 6px;

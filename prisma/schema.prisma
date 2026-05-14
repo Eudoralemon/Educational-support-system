@@ -60,6 +60,8 @@ model Teacher {
   reviewTermMode ReviewTermMode @default(TERM)
   students      Student[]
   practicePacks PracticePack[]
+  textbookExercisePreferences TextbookExercisePreference[]
+  textbookExerciseUsages TextbookExerciseUsage[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -79,6 +81,7 @@ model Student {
   practicePacks PracticePack[]
   mastery       KnowledgeMastery[]
   reviewRecords ReviewRecord[]
+  textbookExerciseUsages TextbookExerciseUsage[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -124,6 +127,8 @@ model TextbookExercise {
   knowledgePointId String
   knowledgePoint   KnowledgePoint  @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
   practiceItems    PracticeItem[]
+  preferences      TextbookExercisePreference[]
+  usages           TextbookExerciseUsage[]
   createdAt        DateTime        @default(now())
 
   @@index([knowledgePointId])
@@ -189,6 +194,7 @@ model PracticePack {
   regionTag   RegionTag          @default(JS)
   status      PracticePackStatus @default(DRAFT)
   items       PracticeItem[]
+  textbookExerciseUsages TextbookExerciseUsage[]
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   printedAt   DateTime?
@@ -212,6 +218,7 @@ model PracticeItem {
   textbookExercise   TextbookExercise? @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
   sourceMistakeId  String?
   sourceMistake    Mistake?        @relation(fields: [sourceMistakeId], references: [id], onDelete: SetNull)
+  textbookExerciseUsage TextbookExerciseUsage?
   createdAt        DateTime        @default(now())
 
   @@index([packId])
@@ -272,4 +279,45 @@ model ReviewRecord {
   @@index([mistakeId])
   @@index([reviewedAt])
   @@index([nextReviewAt])
+}
+
+model TextbookExercisePreference {
+  id                 String           @id @default(cuid())
+  teacherId          String
+  teacher            Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  textbookExerciseId String
+  textbookExercise   TextbookExercise @relation(fields: [textbookExerciseId], references: [id], onDelete: Cascade)
+  isFavorite         Boolean          @default(false)
+  note               String?
+  difficultyOverride Int?
+  isDisabled         Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([teacherId, textbookExerciseId])
+  @@index([teacherId])
+  @@index([textbookExerciseId])
+  @@index([isFavorite])
+  @@index([isDisabled])
+}
+
+model TextbookExerciseUsage {
+  id                 String           @id @default(cuid())
+  teacherId          String
+  teacher            Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  packId             String?
+  pack               PracticePack?    @relation(fields: [packId], references: [id], onDelete: SetNull)
+  practiceItemId     String?          @unique
+  practiceItem       PracticeItem?    @relation(fields: [practiceItemId], references: [id], onDelete: SetNull)
+  textbookExerciseId String
+  textbookExercise   TextbookExercise @relation(fields: [textbookExerciseId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@index([teacherId])
+  @@index([studentId])
+  @@index([packId])
+  @@index([textbookExerciseId])
+  @@index([createdAt])
 }

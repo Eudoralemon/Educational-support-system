@@ -13,16 +13,21 @@ export default async function PracticePackPage({
 }) {
   const teacher = await requireTeacher();
   const { id } = await params;
-  const pack = await prisma.practicePack.findUnique({
-    where: { id },
-    include: {
-      student: true,
-      items: {
-        include: { knowledgePoint: true, textbookExercise: true },
-        orderBy: { order: "asc" },
+  const [pack, knowledgePoints] = await Promise.all([
+    prisma.practicePack.findUnique({
+      where: { id },
+      include: {
+        student: true,
+        items: {
+          include: { knowledgePoint: true, textbookExercise: true },
+          orderBy: { order: "asc" },
+        },
       },
-    },
-  });
+    }),
+    prisma.knowledgePoint.findMany({
+      orderBy: [{ textbook: "asc" }, { module: "asc" }, { chapter: "asc" }, { name: "asc" }],
+    }),
+  ]);
 
   if (!pack) notFound();
   if (pack.teacherId !== teacher.id) redirect("/dashboard");
@@ -55,6 +60,14 @@ export default async function PracticePackPage({
             id: pack.id,
             title: pack.title,
             status: pack.status,
+            studentId: pack.studentId,
+            knowledgePoints: knowledgePoints.map((point) => ({
+              id: point.id,
+              name: point.name,
+              module: point.module,
+              textbook: point.textbook,
+              chapter: point.chapter,
+            })),
             items: pack.items.map((item) => ({
               id: item.id,
               order: item.order,
