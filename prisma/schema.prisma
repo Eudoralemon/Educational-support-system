@@ -68,62 +68,117 @@ enum TextbookMatchStatus {
   REJECTED
 }
 
+enum TextbookContentBlockType {
+  CONCEPT
+  EXAMPLE
+  EXERCISE
+  THINKING
+  EXPLORATION
+  READING
+  SUMMARY
+  ANSWER
+  ANALYSIS
+  OTHER
+}
+
+enum TextbookExerciseSourceType {
+  EXTRACTED
+  FALLBACK
+  MANUAL
+}
+
+enum TeachingContributionType {
+  KNOWLEDGE_EXPLANATION
+  EXERCISE_SOLUTION
+}
+
+enum TeachingContributorKind {
+  TEACHER
+  STUDENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model Teacher {
-  id            String         @id @default(cuid())
-  name          String
-  phone         String?        @unique
-  email         String?        @unique
-  reviewTermMode ReviewTermMode @default(TERM)
-  students      Student[]
-  practicePacks PracticePack[]
+  id                          String                       @id @default(cuid())
+  name                        String
+  phone                       String?                      @unique
+  email                       String?                      @unique
+  reviewTermMode              ReviewTermMode               @default(TERM)
+  students                    Student[]
+  practicePacks               PracticePack[]
   textbookExercisePreferences TextbookExercisePreference[]
-  textbookExerciseUsages TextbookExerciseUsage[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  textbookExerciseUsages      TextbookExerciseUsage[]
+  teachingContributions       TeachingContribution[]
+  mediaAssets                 MediaAsset[]
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
 }
 
 model Student {
-  id            String         @id @default(cuid())
-  name          String
-  grade         String         @default("高三")
-  school        String?
-  province      String         @default("江苏")
-  textbookTrack String         @default("苏教版")
-  reviewCadence ReviewCadence  @default(WEEKLY_WEEKEND)
-  reviewBatchSize Int          @default(8)
-  teacherId     String
-  teacher       Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  mistakes      Mistake[]
-  practicePacks PracticePack[]
-  mastery       KnowledgeMastery[]
-  reviewRecords ReviewRecord[]
+  id                     String                  @id @default(cuid())
+  name                   String
+  grade                  String                  @default("高三")
+  school                 String?
+  province               String                  @default("江苏")
+  textbookTrack          String                  @default("苏教版")
+  reviewCadence          ReviewCadence           @default(WEEKLY_WEEKEND)
+  reviewBatchSize        Int                     @default(8)
+  status                 StudentStatus           @default(ACTIVE)
+  archivedAt             DateTime?
+  archivedReason         String?
+  teacherId              String
+  teacher                Teacher                 @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  mistakes               Mistake[]
+  practicePacks          PracticePack[]
+  mastery                KnowledgeMastery[]
+  reviewRecords          ReviewRecord[]
   textbookExerciseUsages TextbookExerciseUsage[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  teachingContributions  TeachingContribution[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([teacherId])
+  @@index([status])
+}
+
+model MediaAsset {
+  id            String   @id @default(cuid())
+  teacherId     String
+  teacher       Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  imagePath     String   @unique
+  imageMimeType String
+  originalName  String?
+  createdAt     DateTime @default(now())
 
   @@index([teacherId])
 }
 
 model KnowledgePoint {
-  id            String                  @id @default(cuid())
-  code          String                  @unique
-  name          String
-  module        String
-  textbook      String
-  chapter       String
-  section       String?
-  region        RegionTag               @default(JS)
-  examWeight    Int                     @default(1)
-  parentId      String?
-  parent        KnowledgePoint?         @relation("KnowledgeTree", fields: [parentId], references: [id])
-  children      KnowledgePoint[]        @relation("KnowledgeTree")
-  mistakeLinks  MistakeKnowledgePoint[]
-  textbookItems TextbookExercise[]
-  practiceItems PracticeItem[]
-  mastery       KnowledgeMastery[]
-  textbookCandidates TextbookExerciseCandidate[]
-  mistakeMatches MistakeTextbookMatch[]
-  createdAt     DateTime                @default(now())
+  id                    String                      @id @default(cuid())
+  code                  String                      @unique
+  name                  String
+  module                String
+  textbook              String
+  chapter               String
+  section               String?
+  region                RegionTag                   @default(JS)
+  examWeight            Int                         @default(1)
+  parentId              String?
+  parent                KnowledgePoint?             @relation("KnowledgeTree", fields: [parentId], references: [id])
+  children              KnowledgePoint[]            @relation("KnowledgeTree")
+  mistakeLinks          MistakeKnowledgePoint[]
+  textbookItems         TextbookExercise[]
+  practiceItems         PracticeItem[]
+  mastery               KnowledgeMastery[]
+  textbookCandidates    TextbookExerciseCandidate[]
+  textbookContentBlocks TextbookContentBlock[]
+  mistakeMatches        MistakeTextbookMatch[]
+  teachingContributions TeachingContribution[]
+  createdAt             DateTime                    @default(now())
 
   @@index([module])
   @@index([textbook])
@@ -131,28 +186,38 @@ model KnowledgePoint {
 }
 
 model TextbookExercise {
-  id               String          @id @default(cuid())
-  code             String          @unique
-  textbook         String
-  chapter          String
-  section          String?
-  sourcePage       Int?
-  sourceLabel      String
-  prompt           String
-  answerText       String?
-  analysisText     String?
-  difficulty       Int             @default(1)
-  knowledgePointId String
-  knowledgePoint   KnowledgePoint  @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
-  practiceItems    PracticeItem[]
-  preferences      TextbookExercisePreference[]
-  usages           TextbookExerciseUsage[]
+  id                    String                       @id @default(cuid())
+  code                  String                       @unique
+  textbook              String
+  chapter               String
+  section               String?
+  sourcePage            Int?
+  sourceLabel           String
+  prompt                String
+  answerText            String?
+  analysisText          String?
+  difficulty            Int                          @default(1)
+  sourceType            TextbookExerciseSourceType   @default(EXTRACTED)
+  isTeacherVerified     Boolean                      @default(false)
+  isArchived            Boolean                      @default(false)
+  archivedAt            DateTime?
+  knowledgePointId      String
+  knowledgePoint        KnowledgePoint               @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+  sourceBlockId         String?
+  sourceBlock           TextbookContentBlock?        @relation(fields: [sourceBlockId], references: [id], onDelete: SetNull)
+  practiceItems         PracticeItem[]
+  preferences           TextbookExercisePreference[]
+  usages                TextbookExerciseUsage[]
   recognitionCandidates TextbookExerciseCandidate[]
-  mistakeMatches   MistakeTextbookMatch[]
-  createdAt        DateTime        @default(now())
+  mistakeMatches        MistakeTextbookMatch[]
+  teachingContributions TeachingContribution[]
+  createdAt             DateTime                     @default(now())
 
   @@index([knowledgePointId])
   @@index([textbook])
+  @@index([sourceType])
+  @@index([isArchived])
+  @@index([sourceBlockId])
 }
 
 model ErrorType {
@@ -176,9 +241,9 @@ model Mistake {
   regionTag       RegionTag               @default(JS)
   sourceYear      Int?
   questionType    String?
-  status          MistakeStatus            @default(DRAFT)
+  status          MistakeStatus           @default(DRAFT)
   errorTypeId     String?
-  errorType       ErrorType?               @relation(fields: [errorTypeId], references: [id])
+  errorType       ErrorType?              @relation(fields: [errorTypeId], references: [id])
   aiDraftJson     Json?
   knowledgeLinks  MistakeKnowledgePoint[]
   practiceItems   PracticeItem[]
@@ -186,6 +251,7 @@ model Mistake {
   reviewRecords   ReviewRecord[]
   attachments     MistakeAttachment[]
   textbookMatches MistakeTextbookMatch[]
+  teachingContributions TeachingContribution[]
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
   reviewedAt      DateTime?
@@ -226,13 +292,13 @@ model MistakeKnowledgePoint {
 }
 
 model MistakeTextbookMatch {
-  id                 String                @id @default(cuid())
+  id                 String              @id @default(cuid())
   mistakeId          String
-  mistake            Mistake               @relation(fields: [mistakeId], references: [id], onDelete: Cascade)
+  mistake            Mistake             @relation(fields: [mistakeId], references: [id], onDelete: Cascade)
   textbookExerciseId String?
-  textbookExercise   TextbookExercise?     @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
+  textbookExercise   TextbookExercise?   @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
   knowledgePointId   String?
-  knowledgePoint     KnowledgePoint?       @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
+  knowledgePoint     KnowledgePoint?     @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
   textbook           String
   chapter            String
   section            String?
@@ -240,9 +306,9 @@ model MistakeTextbookMatch {
   sourceLabel        String?
   score              Int
   reason             String?
-  status             TextbookMatchStatus   @default(SUGGESTED)
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  status             TextbookMatchStatus @default(SUGGESTED)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([mistakeId])
   @@index([textbookExerciseId])
@@ -251,41 +317,41 @@ model MistakeTextbookMatch {
 }
 
 model PracticePack {
-  id          String             @id @default(cuid())
-  title       String
-  teacherId   String
-  teacher     Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  regionTag   RegionTag          @default(JS)
-  status      PracticePackStatus @default(DRAFT)
-  items       PracticeItem[]
+  id                     String                  @id @default(cuid())
+  title                  String
+  teacherId              String
+  teacher                Teacher                 @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId              String
+  student                Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  regionTag              RegionTag               @default(JS)
+  status                 PracticePackStatus      @default(DRAFT)
+  items                  PracticeItem[]
   textbookExerciseUsages TextbookExerciseUsage[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  printedAt   DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  printedAt              DateTime?
 
   @@index([teacherId])
   @@index([studentId])
 }
 
 model PracticeItem {
-  id               String          @id @default(cuid())
-  packId           String
-  pack             PracticePack    @relation(fields: [packId], references: [id], onDelete: Cascade)
-  prompt           String
-  answerText       String?
-  analysisText     String?
-  order            Int
-  isAiDraft        Boolean         @default(false)
-  knowledgePointId String?
-  knowledgePoint   KnowledgePoint? @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
-  textbookExerciseId String?
-  textbookExercise   TextbookExercise? @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
-  sourceMistakeId  String?
-  sourceMistake    Mistake?        @relation(fields: [sourceMistakeId], references: [id], onDelete: SetNull)
+  id                    String                 @id @default(cuid())
+  packId                String
+  pack                  PracticePack           @relation(fields: [packId], references: [id], onDelete: Cascade)
+  prompt                String
+  answerText            String?
+  analysisText          String?
+  order                 Int
+  isAiDraft             Boolean                @default(false)
+  knowledgePointId      String?
+  knowledgePoint        KnowledgePoint?        @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
+  textbookExerciseId    String?
+  textbookExercise      TextbookExercise?      @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
+  sourceMistakeId       String?
+  sourceMistake         Mistake?               @relation(fields: [sourceMistakeId], references: [id], onDelete: SetNull)
   textbookExerciseUsage TextbookExerciseUsage?
-  createdAt        DateTime        @default(now())
+  createdAt             DateTime               @default(now())
 
   @@index([packId])
   @@index([textbookExerciseId])
@@ -309,18 +375,18 @@ model AiTask {
 }
 
 model KnowledgeMastery {
-  id               String          @id @default(cuid())
+  id               String         @id @default(cuid())
   studentId        String
-  student          Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student          Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
   knowledgePointId String
-  knowledgePoint   KnowledgePoint  @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
-  score            Int             @default(50)
-  masteredStreak   Int             @default(0)
-  forgotCount      Int             @default(0)
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+  score            Int            @default(50)
+  masteredStreak   Int            @default(0)
+  forgotCount      Int            @default(0)
   reviewedAt       DateTime?
   nextReviewAt     DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   @@unique([studentId, knowledgePointId])
   @@index([studentId])
@@ -388,6 +454,39 @@ model TextbookExerciseUsage {
   @@index([createdAt])
 }
 
+model TeachingContribution {
+  id                     String                   @id @default(cuid())
+  teacherId              String
+  teacher                Teacher                  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  knowledgePointId       String
+  knowledgePoint         KnowledgePoint           @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+  textbookExerciseId     String?
+  textbookExercise       TextbookExercise?         @relation(fields: [textbookExerciseId], references: [id], onDelete: SetNull)
+  sourceMistakeId        String?
+  sourceMistake          Mistake?                  @relation(fields: [sourceMistakeId], references: [id], onDelete: SetNull)
+  type                   TeachingContributionType
+  title                  String
+  content                String
+  backgroundKnowledge    String?
+  contributorKind        TeachingContributorKind   @default(TEACHER)
+  contributorStudentId   String?
+  contributorStudent     Student?                  @relation(fields: [contributorStudentId], references: [id], onDelete: SetNull)
+  contributorName        String
+  exercisePromptSnapshot String?
+  isArchived             Boolean                  @default(false)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  @@index([teacherId])
+  @@index([knowledgePointId])
+  @@index([textbookExerciseId])
+  @@index([sourceMistakeId])
+  @@index([contributorStudentId])
+  @@index([type])
+  @@index([isArchived])
+  @@index([createdAt])
+}
+
 model TextbookPageRecognition {
   id          String                      @id @default(cuid())
   textbook    String
@@ -406,8 +505,44 @@ model TextbookPageRecognition {
   @@index([confidence])
 }
 
+model TextbookContentBlock {
+  id               String                      @id @default(cuid())
+  recognitionKey   String?                     @unique
+  textbook         String
+  chapter          String
+  section          String?
+  blockType        TextbookContentBlockType
+  sourcePageStart  Int?
+  sourcePageEnd    Int?
+  sourceLabel      String
+  title            String?
+  contentText      String
+  order            Int
+  confidence       Int                         @default(40)
+  isTeacherEdited  Boolean                     @default(false)
+  isArchived       Boolean                     @default(false)
+  editedAt         DateTime?
+  archivedAt       DateTime?
+  knowledgePointId String?
+  knowledgePoint   KnowledgePoint?             @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
+  exercises        TextbookExercise[]
+  candidates       TextbookExerciseCandidate[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@index([textbook])
+  @@index([chapter])
+  @@index([knowledgePointId])
+  @@index([blockType])
+  @@index([confidence])
+  @@index([isTeacherEdited])
+  @@index([isArchived])
+  @@index([sourcePageStart])
+}
+
 model TextbookExerciseCandidate {
   id                 String                   @id @default(cuid())
+  recognitionKey     String?                  @unique
   textbook           String
   chapter            String
   section            String?
@@ -420,8 +555,14 @@ model TextbookExerciseCandidate {
   reason             String?
   accepted           Boolean                  @default(false)
   rejected           Boolean                  @default(false)
+  isTeacherEdited    Boolean                  @default(false)
+  isArchived         Boolean                  @default(false)
+  editedAt           DateTime?
+  archivedAt         DateTime?
   pageRecognitionId  String?
   pageRecognition    TextbookPageRecognition? @relation(fields: [pageRecognitionId], references: [id], onDelete: SetNull)
+  sourceBlockId      String?
+  sourceBlock        TextbookContentBlock?    @relation(fields: [sourceBlockId], references: [id], onDelete: SetNull)
   knowledgePointId   String?
   knowledgePoint     KnowledgePoint?          @relation(fields: [knowledgePointId], references: [id], onDelete: SetNull)
   textbookExerciseId String?
@@ -432,7 +573,10 @@ model TextbookExerciseCandidate {
   @@index([textbook])
   @@index([knowledgePointId])
   @@index([textbookExerciseId])
+  @@index([sourceBlockId])
   @@index([confidence])
   @@index([accepted])
   @@index([rejected])
+  @@index([isTeacherEdited])
+  @@index([isArchived])
 }

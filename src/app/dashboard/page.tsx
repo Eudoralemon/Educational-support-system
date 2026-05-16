@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MistakeStatus } from "@prisma/client";
+import { MistakeStatus, StudentStatus } from "@prisma/client";
 import { BarChart3, BookOpen, ClipboardList, Plus, Upload, UserRound } from "lucide-react";
 import { createStudent, setTeacherReviewMode } from "@/app/actions";
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
@@ -25,32 +25,40 @@ const textbookNames = [
 
 export default async function DashboardPage() {
   const teacher = await requireTeacher();
-  const [students, recentMistakes, draftMistakes, draftCount, practicePacks, diagnostics, reviewOverview, textbookCount, exerciseCount] =
+  const [students, archivedStudents, recentMistakes, draftMistakes, draftCount, practicePacks, diagnostics, reviewOverview, textbookCount, exerciseCount] =
     await Promise.all([
       prisma.student.findMany({
-        where: { teacherId: teacher.id },
+        where: { teacherId: teacher.id, status: StudentStatus.ACTIVE },
         include: {
           _count: { select: { mistakes: true, practicePacks: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
+      prisma.student.findMany({
+        where: { teacherId: teacher.id, status: StudentStatus.ARCHIVED },
+        include: {
+          _count: { select: { mistakes: true, practicePacks: true } },
+        },
+        orderBy: { archivedAt: "desc" },
+        take: 8,
+      }),
       prisma.mistake.findMany({
-        where: { student: { teacherId: teacher.id } },
+        where: { student: { teacherId: teacher.id, status: StudentStatus.ACTIVE } },
         include: { student: true },
         orderBy: { createdAt: "desc" },
         take: 8,
       }),
       prisma.mistake.findMany({
-        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id } },
+        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id, status: StudentStatus.ACTIVE } },
         include: { student: true },
         orderBy: { createdAt: "asc" },
         take: 5,
       }),
       prisma.mistake.count({
-        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id } },
+        where: { status: MistakeStatus.DRAFT, student: { teacherId: teacher.id, status: StudentStatus.ACTIVE } },
       }),
       prisma.practicePack.findMany({
-        where: { teacherId: teacher.id },
+        where: { teacherId: teacher.id, student: { status: StudentStatus.ACTIVE } },
         include: { student: true, items: true },
         orderBy: { createdAt: "desc" },
         take: 6,
@@ -193,6 +201,29 @@ export default async function DashboardPage() {
               </div>
             )}
           </section>
+
+          {archivedStudents.length ? (
+            <section className="panel">
+              <h2 className="panel-title">
+                <UserRound size={18} />
+                已归档学生
+              </h2>
+              <div className="grid two">
+                {archivedStudents.map((student) => (
+                  <Link className="card archived-card" href={`/students/${student.id}`} key={student.id}>
+                    <div className="item-top">
+                      <strong>{student.name}</strong>
+                      <span className="badge gray">已归档</span>
+                    </div>
+                    <span className="muted">
+                      {student.grade} · {student.school || "未填写学校"} · {student._count.mistakes} 道错题 ·{" "}
+                      {student._count.practicePacks} 份练习
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="panel" id="diagnostics">
             <h2 className="panel-title">

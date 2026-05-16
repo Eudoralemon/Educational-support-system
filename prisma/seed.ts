@@ -1,4 +1,4 @@
-import { MistakeStatus, PrismaClient, RegionTag } from "@prisma/client";
+import { MistakeStatus, PrismaClient, RegionTag, TextbookExerciseSourceType } from "@prisma/client";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -286,6 +286,8 @@ async function seedFallbackExercise(point: {
       prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
       analysisText: "本题源自本地苏教版教材目录定位；若需自动写入原题，请确认项目根目录保留对应 PDF 并重新运行 npm.cmd run db:seed。",
       difficulty: 1,
+      sourceType: TextbookExerciseSourceType.FALLBACK,
+      isTeacherVerified: false,
       knowledgePointId: point.id,
     },
     create: {
@@ -297,6 +299,8 @@ async function seedFallbackExercise(point: {
       prompt: `【教材题源】请打开《${point.textbook}》${point.chapter}${point.section ? `“${point.section}”` : ""}，选做本节“练习”或“习题”中与“${point.name}”对应的一题，并完整作答。`,
       analysisText: "本题源自本地苏教版教材目录定位；若需自动写入原题，请确认项目根目录保留对应 PDF 并重新运行 npm.cmd run db:seed。",
       difficulty: 1,
+      sourceType: TextbookExerciseSourceType.FALLBACK,
+      isTeacherVerified: false,
       knowledgePointId: point.id,
     },
   });
@@ -346,6 +350,8 @@ async function seedTextbookExercises() {
           prompt,
           analysisText: `来源：《${point.textbook}》${point.chapter}${point.section ? ` ${point.section}` : ""}。`,
           difficulty: index + 1,
+          sourceType: TextbookExerciseSourceType.EXTRACTED,
+          isTeacherVerified: false,
           knowledgePointId: point.id,
         },
         create: {
@@ -358,6 +364,8 @@ async function seedTextbookExercises() {
           prompt,
           analysisText: `来源：《${point.textbook}》${point.chapter}${point.section ? ` ${point.section}` : ""}。`,
           difficulty: index + 1,
+          sourceType: TextbookExerciseSourceType.EXTRACTED,
+          isTeacherVerified: false,
           knowledgePointId: point.id,
         },
       });

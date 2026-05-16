@@ -18,8 +18,8 @@ export async function POST() {
       data: {
         type: AiTaskType.TEXTBOOK_RECOGNITION,
         status: AiTaskStatus.COMPLETED,
-        provider: "local-ocr",
-        inputJson: { source: "local-pdf" },
+        provider: "pdfjs",
+        inputJson: { source: "local-pdf-text-layer" },
         outputJson: { summary },
         completedAt: new Date(),
       },
@@ -31,8 +31,8 @@ export async function POST() {
       data: {
         type: AiTaskType.TEXTBOOK_RECOGNITION,
         status: AiTaskStatus.FAILED,
-        provider: "local-ocr",
-        inputJson: { source: "local-pdf" },
+        provider: "pdfjs",
+        inputJson: { source: "local-pdf-text-layer" },
         errorMessage: error instanceof Error ? error.message : "教材识别失败",
         completedAt: new Date(),
       },

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { BarChart3, ClipboardList, Settings, Upload } from "lucide-react";
+import { Archive, BarChart3, ClipboardList, RotateCcw, Settings, Trash2, Upload } from "lucide-react";
+import { StudentStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
-import { updateStudentReviewSettings } from "@/app/actions";
+import { archiveStudent, hardDeleteStudent, restoreStudent, updateStudentReviewSettings } from "@/app/actions";
 import { CreatePracticePackButton } from "@/components/CreatePracticePackButton";
 import { DiagnosticPanel } from "@/components/DiagnosticPanel";
 import { requireTeacher } from "@/lib/auth";
@@ -50,6 +51,7 @@ export default async function StudentPage({
   ]);
   if (!reviewOverview) notFound();
   const lowMasteryCount = reviewOverview.masteries.filter((item) => item.score < 60).length;
+  const isArchived = student.status === StudentStatus.ARCHIVED;
 
   return (
     <>
@@ -65,13 +67,26 @@ export default async function StudentPage({
             <BarChart3 size={18} />
             诊断看板
           </Link>
-          <Link className="button secondary" href="/mistakes/new">
-            <Upload size={18} />
-            录入错题
-          </Link>
-          <CreatePracticePackButton studentId={student.id} />
+          {isArchived ? (
+            <span className="badge gray">已归档</span>
+          ) : (
+            <>
+              <Link className="button secondary" href="/mistakes/new">
+                <Upload size={18} />
+                录入错题
+              </Link>
+              <CreatePracticePackButton studentId={student.id} />
+            </>
+          )}
         </div>
       </header>
+
+      {isArchived ? (
+        <section className="empty" style={{ marginBottom: 16 }}>
+          该学生已归档，不再进入日常工作台、错题录入、复习窗口和练习包生成。可在页面右侧恢复。
+          {student.archivedReason ? ` 归档原因：${student.archivedReason}` : ""}
+        </section>
+      ) : null}
 
       <section className="grid three">
         <div className="stat">
@@ -241,6 +256,61 @@ export default async function StudentPage({
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="panel">
+            <h2 className="panel-title">
+              <Archive size={18} />
+              学生状态
+            </h2>
+            {isArchived ? (
+              <form action={restoreStudent} className="form-grid">
+                <input name="studentId" type="hidden" value={student.id} />
+                <div className="empty">
+                  已归档
+                  {student.archivedAt ? ` · ${formatDay(student.archivedAt)}` : ""}
+                </div>
+                <button className="button" type="submit">
+                  <RotateCcw size={18} />
+                  恢复学生
+                </button>
+              </form>
+            ) : (
+              <form action={archiveStudent} className="form-grid">
+                <input name="studentId" type="hidden" value={student.id} />
+                <div className="field">
+                  <label htmlFor="archivedReason">归档原因</label>
+                  <input
+                    className="input"
+                    id="archivedReason"
+                    name="archivedReason"
+                    placeholder="如：已毕业、暂停辅导、重复录入"
+                  />
+                </div>
+                <button className="button secondary" type="submit">
+                  <Archive size={18} />
+                  归档学生
+                </button>
+              </form>
+            )}
+          </section>
+
+          <section className="panel danger-zone">
+            <h2 className="panel-title">
+              <Trash2 size={18} />
+              危险区
+            </h2>
+            <form action={hardDeleteStudent} className="form-grid">
+              <input name="studentId" type="hidden" value={student.id} />
+              <div className="field">
+                <label htmlFor="confirmName">输入学生姓名后永久删除</label>
+                <input className="input" id="confirmName" name="confirmName" placeholder={student.name} />
+              </div>
+              <button className="button danger" type="submit">
+                <Trash2 size={18} />
+                永久删除学生
+              </button>
+            </form>
           </section>
 
           <section className="panel">

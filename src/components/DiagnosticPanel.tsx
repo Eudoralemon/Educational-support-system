@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AlertCircle, BarChart3, Clock, Target } from "lucide-react";
+import { MathMarkdown } from "@/components/MathMarkdown";
 import { formatDay } from "@/lib/labels";
 
 type KnowledgePointSummary = {
@@ -112,7 +113,7 @@ export function DueMistakeList({ items }: { items: DueMistake[] }) {
             <strong>{item.studentName ?? "错题复习"}</strong>
             <span className="badge green">{formatDay(item.reviewDueAt)}</span>
           </div>
-          <span className="muted">{item.questionText ?? "题图待校对"}</span>
+          <MathMarkdown className="compact-text" content={item.questionText} placeholder="题图待校对" />
         </Link>
       ))}
     </div>

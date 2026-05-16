@@ -3,7 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ReviewCadence, ReviewResult, ReviewTermMode } from "@prisma/client";
+import { unlink } from "node:fs/promises";
+import path from "node:path";
+import {
+  ReviewCadence,
+  ReviewResult,
+  ReviewTermMode,
+  StudentStatus,
+  TeachingContributorKind,
+  TeachingContributionType,
+  TextbookContentBlockType,
+  TextbookExerciseSourceType,
+} from "@prisma/client";
 import { teacherCookieName } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { recordMistakeReview } from "@/lib/review";
@@ -51,6 +62,101 @@ function asReviewResult(value: string): ReviewResult {
   }
 
   return ReviewResult.PARTIAL;
+}
+
+function asTeachingContributionType(value: string): TeachingContributionType {
+  if (
+    value === TeachingContributionType.KNOWLEDGE_EXPLANATION ||
+    value === TeachingContributionType.EXERCISE_SOLUTION
+  ) {
+    return value;
+  }
+
+  return TeachingContributionType.KNOWLEDGE_EXPLANATION;
+}
+
+function asTeachingContributorKind(value: string): TeachingContributorKind {
+  return value === TeachingContributorKind.STUDENT
+    ? TeachingContributorKind.STUDENT
+    : TeachingContributorKind.TEACHER;
+}
+
+function asTextbookContentBlockType(value: string): TextbookContentBlockType {
+  return Object.values(TextbookContentBlockType).includes(value as TextbookContentBlockType)
+    ? (value as TextbookContentBlockType)
+    : TextbookContentBlockType.OTHER;
+}
+
+function optionalInt(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function resolveTeachingContributor({
+  teacherId,
+  kind,
+  studentId,
+}: {
+  teacherId: string;
+  kind: TeachingContributorKind;
+  studentId: string;
+}) {
+  if (kind === TeachingContributorKind.STUDENT && studentId) {
+    const student = await prisma.student.findFirst({
+      where: { id: studentId, teacherId },
+      select: { id: true, name: true },
+    });
+
+    if (student) {
+      return {
+        contributorKind: TeachingContributorKind.STUDENT,
+        contributorStudentId: student.id,
+        contributorName: student.name,
+      };
+    }
+  }
+
+  const teacher = await prisma.teacher.findUnique({
+    where: { id: teacherId },
+    select: { name: true },
+  });
+
+  return {
+    contributorKind: TeachingContributorKind.TEACHER,
+    contributorStudentId: null,
+    contributorName: teacher?.name ?? "数学教师",
+  };
+}
+
+async function resolveTeachingExercise({
+  knowledgePointId,
+  textbookExerciseId,
+  exercisePromptSnapshot,
+  type,
+}: {
+  knowledgePointId: string;
+  textbookExerciseId: string;
+  exercisePromptSnapshot: string;
+  type: TeachingContributionType;
+}) {
+  if (type !== TeachingContributionType.EXERCISE_SOLUTION) {
+    return {
+      textbookExerciseId: null,
+      exercisePromptSnapshot: null,
+    };
+  }
+
+  const exercise = textbookExerciseId
+    ? await prisma.textbookExercise.findFirst({
+        where: { id: textbookExerciseId, knowledgePointId },
+        select: { id: true, prompt: true },
+      })
+    : null;
+
+  return {
+    textbookExerciseId: exercise?.id ?? null,
+    exercisePromptSnapshot: exercisePromptSnapshot || exercise?.prompt || null,
+  };
 }
 
 export async function loginTeacher(formData: FormData) {
@@ -139,6 +245,96 @@ export async function updateStudentReviewSettings(formData: FormData) {
   revalidatePath(`/students/${student.id}`);
 }
 
+export async function archiveStudent(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const studentId = getString(formData, "studentId");
+  const reason = getString(formData, "archivedReason");
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, teacherId },
+    select: { id: true },
+  });
+
+  if (!student) return;
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      status: StudentStatus.ARCHIVED,
+      archivedAt: new Date(),
+      archivedReason: reason || null,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/students/${student.id}`);
+}
+
+export async function restoreStudent(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const studentId = getString(formData, "studentId");
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, teacherId },
+    select: { id: true },
+  });
+
+  if (!student) return;
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      status: StudentStatus.ACTIVE,
+      archivedAt: null,
+      archivedReason: null,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/students/${student.id}`);
+}
+
+async function removeUploadFiles(relativePaths: string[]) {
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  const uniquePaths = Array.from(new Set(relativePaths.filter((item) => item.startsWith("uploads/"))));
+
+  for (const relativePath of uniquePaths) {
+    const target = path.join(uploadsDir, path.basename(relativePath));
+    try {
+      await unlink(target);
+    } catch {
+      // Best-effort cleanup only; database deletion should not fail because a file is already gone.
+    }
+  }
+}
+
+export async function hardDeleteStudent(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const studentId = getString(formData, "studentId");
+  const confirmName = getString(formData, "confirmName");
+  const student = await prisma.student.findFirst({
+    where: { id: studentId, teacherId },
+    include: {
+      mistakes: {
+        include: {
+          attachments: true,
+        },
+      },
+    },
+  });
+
+  if (!student || confirmName !== student.name) return;
+
+  const filePaths = student.mistakes.flatMap((mistake) => [
+    mistake.imagePath,
+    ...mistake.attachments.map((attachment) => attachment.imagePath),
+  ]).filter((item): item is string => Boolean(item));
+
+  await prisma.student.delete({ where: { id: student.id } });
+  await removeUploadFiles(filePaths);
+
+  revalidatePath("/dashboard");
+  redirect("/dashboard");
+}
+
 export async function completeMistakeReview(formData: FormData) {
   const teacherId = await requireTeacherId();
   const mistakeId = getString(formData, "mistakeId");
@@ -155,6 +351,118 @@ export async function completeMistakeReview(formData: FormData) {
   revalidatePath(`/students/${review.studentId}`);
   revalidatePath(`/diagnostics/student/${review.studentId}`);
   revalidatePath(`/mistakes/${mistakeId}/review`);
+}
+
+export async function updateTextbookContentBlock(formData: FormData) {
+  await requireTeacherId();
+  const blockId = getString(formData, "blockId");
+  const contentText = getString(formData, "contentText");
+  const knowledgePointId = getString(formData, "knowledgePointId");
+
+  if (!blockId || !contentText) return;
+
+  const knowledgePoint = knowledgePointId
+    ? await prisma.knowledgePoint.findUnique({ where: { id: knowledgePointId } })
+    : null;
+
+  await prisma.textbookContentBlock.update({
+    where: { id: blockId },
+    data: {
+      title: getString(formData, "title") || null,
+      textbook: knowledgePoint?.textbook ?? undefined,
+      blockType: asTextbookContentBlockType(getString(formData, "blockType")),
+      sourceLabel: getString(formData, "sourceLabel") || "教师修订内容",
+      sourcePageStart: optionalInt(getString(formData, "sourcePageStart")),
+      sourcePageEnd: optionalInt(getString(formData, "sourcePageEnd")),
+      contentText,
+      chapter: knowledgePoint?.chapter ?? (getString(formData, "chapter") || "未定位章节"),
+      section: knowledgePoint?.section ?? (getString(formData, "section") || null),
+      knowledgePointId: knowledgePoint?.id ?? null,
+      confidence: 95,
+      isTeacherEdited: true,
+      isArchived: false,
+      editedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/textbooks/recognition");
+}
+
+export async function archiveTextbookContentBlock(formData: FormData) {
+  await requireTeacherId();
+  const blockId = getString(formData, "blockId");
+  if (!blockId) return;
+
+  await prisma.textbookContentBlock.update({
+    where: { id: blockId },
+    data: {
+      isArchived: true,
+      archivedAt: new Date(),
+      isTeacherEdited: true,
+      editedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/textbooks/recognition");
+}
+
+export async function saveTextbookCandidate(formData: FormData) {
+  await requireTeacherId();
+  const candidateId = getString(formData, "candidateId");
+  const knowledgePointId = getString(formData, "knowledgePointId");
+  const prompt = getString(formData, "prompt");
+  const answerText = getString(formData, "answerText");
+  const analysisText = getString(formData, "analysisText");
+
+  if (!candidateId || !knowledgePointId || !prompt) return;
+
+  const [candidate, knowledgePoint] = await Promise.all([
+    prisma.textbookExerciseCandidate.findUnique({
+      where: { id: candidateId },
+      include: { textbookExercise: true },
+    }),
+    prisma.knowledgePoint.findUnique({ where: { id: knowledgePointId } }),
+  ]);
+
+  if (!candidate || !knowledgePoint) return;
+
+  await prisma.textbookExerciseCandidate.update({
+    where: { id: candidate.id },
+    data: {
+      prompt,
+      answerText: answerText || null,
+      analysisText: analysisText || null,
+      knowledgePointId: knowledgePoint.id,
+      textbook: knowledgePoint.textbook,
+      chapter: knowledgePoint.chapter,
+      section: knowledgePoint.section,
+      confidence: 88,
+      rejected: false,
+      isArchived: false,
+      isTeacherEdited: true,
+      editedAt: new Date(),
+      reason: "教师人工修订",
+    },
+  });
+
+  if (candidate.textbookExerciseId) {
+    await prisma.textbookExercise.update({
+      where: { id: candidate.textbookExerciseId },
+      data: {
+        textbook: knowledgePoint.textbook,
+        chapter: knowledgePoint.chapter,
+        section: knowledgePoint.section,
+        prompt,
+        answerText: answerText || null,
+        analysisText: analysisText || null,
+        isTeacherVerified: true,
+        isArchived: false,
+        knowledgePointId: knowledgePoint.id,
+      },
+    });
+  }
+
+  revalidatePath("/textbooks/recognition");
 }
 
 export async function confirmTextbookCandidate(formData: FormData) {
@@ -191,6 +499,11 @@ export async function confirmTextbookCandidate(formData: FormData) {
       prompt,
       answerText: answerText || null,
       analysisText: analysisText || null,
+      sourceType: candidate.sourceBlockId ? TextbookExerciseSourceType.EXTRACTED : TextbookExerciseSourceType.MANUAL,
+      isTeacherVerified: true,
+      isArchived: false,
+      archivedAt: null,
+      sourceBlockId: candidate.sourceBlockId,
       knowledgePointId: knowledgePoint.id,
     },
     create: {
@@ -204,6 +517,11 @@ export async function confirmTextbookCandidate(formData: FormData) {
       answerText: answerText || null,
       analysisText: analysisText || null,
       difficulty: 2,
+      sourceType: candidate.sourceBlockId ? TextbookExerciseSourceType.EXTRACTED : TextbookExerciseSourceType.MANUAL,
+      isTeacherVerified: true,
+      isArchived: false,
+      archivedAt: null,
+      sourceBlockId: candidate.sourceBlockId,
       knowledgePointId: knowledgePoint.id,
     },
   });
@@ -217,6 +535,10 @@ export async function confirmTextbookCandidate(formData: FormData) {
       confidence: 88,
       accepted: true,
       rejected: false,
+      isArchived: false,
+      isTeacherEdited: true,
+      editedAt: new Date(),
+      archivedAt: null,
       knowledgePointId: knowledgePoint.id,
       textbookExerciseId: exercise.id,
       reason: "教师人工确认",
@@ -233,8 +555,163 @@ export async function rejectTextbookCandidate(formData: FormData) {
 
   await prisma.textbookExerciseCandidate.update({
     where: { id: candidateId },
-    data: { rejected: true, accepted: false },
+    data: {
+      rejected: true,
+      accepted: false,
+      isTeacherEdited: true,
+      editedAt: new Date(),
+    },
   });
 
   revalidatePath("/textbooks/recognition");
+}
+
+export async function archiveTextbookCandidate(formData: FormData) {
+  await requireTeacherId();
+  const candidateId = getString(formData, "candidateId");
+  if (!candidateId) return;
+
+  const candidate = await prisma.textbookExerciseCandidate.findUnique({
+    where: { id: candidateId },
+    select: { id: true, textbookExerciseId: true },
+  });
+  if (!candidate) return;
+
+  await prisma.$transaction([
+    prisma.textbookExerciseCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        isArchived: true,
+        rejected: true,
+        accepted: false,
+        archivedAt: new Date(),
+        isTeacherEdited: true,
+        editedAt: new Date(),
+      },
+    }),
+    ...(candidate.textbookExerciseId
+      ? [
+          prisma.textbookExercise.update({
+            where: { id: candidate.textbookExerciseId },
+            data: {
+              isArchived: true,
+              archivedAt: new Date(),
+              isTeacherVerified: true,
+            },
+          }),
+        ]
+      : []),
+  ]);
+
+  revalidatePath("/textbooks/recognition");
+}
+
+export async function createTeachingContribution(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const knowledgePointId = getString(formData, "knowledgePointId");
+  const type = asTeachingContributionType(getString(formData, "type"));
+  const title = getString(formData, "title");
+  const content = getString(formData, "content");
+
+  if (!knowledgePointId || !title || !content) return;
+
+  const knowledgePoint = await prisma.knowledgePoint.findUnique({
+    where: { id: knowledgePointId },
+    select: { id: true },
+  });
+
+  if (!knowledgePoint) return;
+
+  const contributor = await resolveTeachingContributor({
+    teacherId,
+    kind: asTeachingContributorKind(getString(formData, "contributorKind")),
+    studentId: getString(formData, "contributorStudentId"),
+  });
+  const exercise = await resolveTeachingExercise({
+    knowledgePointId,
+    textbookExerciseId: getString(formData, "textbookExerciseId"),
+    exercisePromptSnapshot: getString(formData, "exercisePromptSnapshot"),
+    type,
+  });
+
+  await prisma.teachingContribution.create({
+    data: {
+      teacherId,
+      knowledgePointId,
+      type,
+      title,
+      content,
+      backgroundKnowledge: getString(formData, "backgroundKnowledge") || null,
+      ...contributor,
+      ...exercise,
+    },
+  });
+
+  revalidatePath("/teaching");
+  revalidatePath(`/teaching/knowledge-points/${knowledgePointId}`);
+}
+
+export async function updateTeachingContribution(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const contributionId = getString(formData, "contributionId");
+  const title = getString(formData, "title");
+  const content = getString(formData, "content");
+
+  if (!contributionId || !title || !content) return;
+
+  const contribution = await prisma.teachingContribution.findFirst({
+    where: { id: contributionId, teacherId },
+    select: { id: true, knowledgePointId: true },
+  });
+
+  if (!contribution) return;
+
+  const type = asTeachingContributionType(getString(formData, "type"));
+  const contributor = await resolveTeachingContributor({
+    teacherId,
+    kind: asTeachingContributorKind(getString(formData, "contributorKind")),
+    studentId: getString(formData, "contributorStudentId"),
+  });
+  const exercise = await resolveTeachingExercise({
+    knowledgePointId: contribution.knowledgePointId,
+    textbookExerciseId: getString(formData, "textbookExerciseId"),
+    exercisePromptSnapshot: getString(formData, "exercisePromptSnapshot"),
+    type,
+  });
+
+  await prisma.teachingContribution.update({
+    where: { id: contribution.id },
+    data: {
+      type,
+      title,
+      content,
+      backgroundKnowledge: getString(formData, "backgroundKnowledge") || null,
+      ...contributor,
+      ...exercise,
+    },
+  });
+
+  revalidatePath("/teaching");
+  revalidatePath(`/teaching/knowledge-points/${contribution.knowledgePointId}`);
+}
+
+export async function archiveTeachingContribution(formData: FormData) {
+  const teacherId = await requireTeacherId();
+  const contributionId = getString(formData, "contributionId");
+  if (!contributionId) return;
+
+  const contribution = await prisma.teachingContribution.findFirst({
+    where: { id: contributionId, teacherId },
+    select: { id: true, knowledgePointId: true },
+  });
+
+  if (!contribution) return;
+
+  await prisma.teachingContribution.update({
+    where: { id: contribution.id },
+    data: { isArchived: true },
+  });
+
+  revalidatePath("/teaching");
+  revalidatePath(`/teaching/knowledge-points/${contribution.knowledgePointId}`);
 }

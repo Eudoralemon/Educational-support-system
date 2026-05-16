@@ -16,7 +16,17 @@ export function TextbookRecognitionRunner() {
         method: "POST",
       });
       const payload = (await response.json().catch(() => null)) as
-        | { error?: string; summary?: Array<{ textbook: string; pages: number; candidates: number }> }
+        | {
+            error?: string;
+            summary?: Array<{
+              textbook: string;
+              pages: number;
+              contentBlocks: number;
+              candidates: number;
+              autoApplied: number;
+              lowConfidence: number;
+            }>;
+          }
         | null;
 
       if (!response.ok) {
@@ -24,8 +34,9 @@ export function TextbookRecognitionRunner() {
         return;
       }
 
-      const total = payload?.summary?.reduce((sum, item) => sum + item.candidates, 0) ?? 0;
-      setMessage(`识别完成，更新 ${total} 个题源候选`);
+      const totalBlocks = payload?.summary?.reduce((sum, item) => sum + item.contentBlocks, 0) ?? 0;
+      const totalCandidates = payload?.summary?.reduce((sum, item) => sum + item.candidates, 0) ?? 0;
+      setMessage(`识别完成：${totalBlocks} 个内容块，${totalCandidates} 个题源候选`);
       router.refresh();
     });
   }

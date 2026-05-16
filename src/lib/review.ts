@@ -3,6 +3,7 @@ import {
   ReviewCadence,
   ReviewResult,
   ReviewTermMode,
+  StudentStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
@@ -187,7 +188,7 @@ export async function ensureStudentMastery(studentId: string) {
 
 export async function ensureTeacherMastery(teacherId: string) {
   const students = await prisma.student.findMany({
-    where: { teacherId },
+    where: { teacherId, status: StudentStatus.ACTIVE },
     select: { id: true },
   });
 
@@ -335,7 +336,7 @@ async function buildTasksForStudents(teacherId: string) {
 
   const [mistakes, masteries, recentRecords] = await Promise.all([
     prisma.mistake.findMany({
-      where: { status: MistakeStatus.REVIEWED, student: { teacherId } },
+      where: { status: MistakeStatus.REVIEWED, student: { teacherId, status: StudentStatus.ACTIVE } },
       include: {
         student: true,
         knowledgeLinks: true,
@@ -343,12 +344,12 @@ async function buildTasksForStudents(teacherId: string) {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.knowledgeMastery.findMany({
-      where: { student: { teacherId } },
+      where: { student: { teacherId, status: StudentStatus.ACTIVE } },
       include: { student: true, knowledgePoint: true },
       orderBy: [{ score: "asc" }, { nextReviewAt: "asc" }],
     }),
     prisma.reviewRecord.findMany({
-      where: { student: { teacherId } },
+      where: { student: { teacherId, status: StudentStatus.ACTIVE } },
       include: { student: true, mistake: true },
       orderBy: { reviewedAt: "desc" },
       take: 10,
@@ -398,7 +399,7 @@ async function buildTasksForStudents(teacherId: string) {
     grouped.set(mistake.studentId, existing);
   }
 
-  const students = await prisma.student.findMany({ where: { teacherId } });
+  const students = await prisma.student.findMany({ where: { teacherId, status: StudentStatus.ACTIVE } });
   const batchSizeMap = new Map(students.map((student) => [student.id, student.reviewBatchSize]));
   const tasks = Array.from(grouped.entries()).flatMap(([studentId, items]) =>
     sortTasks(items).slice(0, batchSizeMap.get(studentId) ?? 8),
@@ -446,6 +447,7 @@ export async function getStudentReviewOverview(studentId: string, teacherId: str
     }),
   ]);
   const masteryByPoint = new Map(masteries.map((item) => [item.knowledgePointId, item]));
+  const isArchived = student.status === StudentStatus.ARCHIVED;
   const pool = sortTasks(
     mistakes.flatMap((mistake) => {
       const linkedMasteries = mistake.knowledgeLinks.flatMap((link) => {
@@ -482,6 +484,7 @@ export async function getStudentReviewOverview(studentId: string, teacherId: str
     }),
   );
   const windowTasks = pool
+    .filter(() => !isArchived)
     .filter((task) =>
       isVisibleInCurrentWindow({
         mode: student.teacher.reviewTermMode,
@@ -493,10 +496,10 @@ export async function getStudentReviewOverview(studentId: string, teacherId: str
 
   return {
     student,
-    windowOpen: isWindowOpen(student.teacher.reviewTermMode),
+    windowOpen: !isArchived && isWindowOpen(student.teacher.reviewTermMode),
     windowHint: nextWindowHint(student.teacher.reviewTermMode, student.reviewCadence),
     windowTasks,
-    pool,
+    pool: isArchived ? [] : pool,
     masteries,
     records,
   };

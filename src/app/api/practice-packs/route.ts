@@ -1,4 +1,4 @@
-import { PracticePackStatus, RegionTag } from "@prisma/client";
+import { PracticePackStatus, RegionTag, StudentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getStudentDiagnostics } from "@/lib/diagnostics";
 import { getCurrentTeacher } from "@/lib/auth";
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   const student = await prisma.student.findFirst({
-    where: { id: studentId, teacherId: teacher.id },
+    where: { id: studentId, teacherId: teacher.id, status: StudentStatus.ACTIVE },
   });
 
   if (!student) {

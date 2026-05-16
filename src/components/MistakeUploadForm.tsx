@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Save, Upload } from "lucide-react";
 import { KnowledgePointSelector, type KnowledgePointOption } from "@/components/KnowledgePointSelector";
+import { MathContentEditor } from "@/components/MathContentEditor";
 
 type StudentOption = {
   id: string;
@@ -179,11 +180,11 @@ export function MistakeUploadForm({
                   />
                 </label>
               </div>
-              <textarea
-                className="textarea"
+              <MathContentEditor
                 id={field.textName}
                 name={field.textName}
                 placeholder={field.placeholder}
+                compact
               />
             </section>
           ))}

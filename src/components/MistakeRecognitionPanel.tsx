@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ScanText, Sparkles } from "lucide-react";
+import { MathMarkdown } from "@/components/MathMarkdown";
 
 type Match = {
   id: string;
@@ -94,7 +95,7 @@ export function MistakeRecognitionPanel({
                 {match.sourceLabel ? ` · ${match.sourceLabel}` : ""}
               </span>
               {match.reason ? <span className="muted">{match.reason}</span> : null}
-              {match.prompt ? <p className="preserve-lines compact-text">{match.prompt}</p> : null}
+              {match.prompt ? <MathMarkdown className="compact-text" content={match.prompt} /> : null}
               <button
                 className="button secondary"
                 disabled={isPending || match.status === "ACCEPTED"}

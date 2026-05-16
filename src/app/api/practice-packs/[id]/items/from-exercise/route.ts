@@ -34,7 +34,7 @@ export async function POST(
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "题源加入失败" },
-      { status: error instanceof Error && error.message.includes("停用") ? 400 : 404 },
+      { status: error instanceof Error && /停用|归档/.test(error.message) ? 400 : 404 },
     );
   }
 }

@@ -1,4 +1,4 @@
-import { PracticePackStatus, RegionTag } from "@prisma/client";
+import { PracticePackStatus, RegionTag, StudentStatus, TextbookExerciseSourceType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 type ExerciseQuery = {
@@ -45,8 +45,8 @@ export async function getExerciseLibrary({
   take,
 }: ExerciseQuery) {
   const student = studentId
-    ? await prisma.student.findFirst({
-        where: { id: studentId, teacherId },
+      ? await prisma.student.findFirst({
+        where: { id: studentId, teacherId, status: StudentStatus.ACTIVE },
         select: { id: true },
       })
     : null;
@@ -59,6 +59,7 @@ export async function getExerciseLibrary({
   const exercises = await prisma.textbookExercise.findMany({
     where: {
       textbook: normalize(textbook) || undefined,
+      isArchived: false,
       chapter: normalize(chapter) || undefined,
       knowledgePointId: normalize(knowledgePointId) || undefined,
       knowledgePoint: normalize(module) ? { module: normalize(module) } : undefined,
@@ -111,6 +112,8 @@ export async function getExerciseLibrary({
       section: exercise.section,
       sourceLabel: exercise.sourceLabel,
       sourcePage: exercise.sourcePage,
+      sourceType: exercise.sourceType,
+      isTeacherVerified: exercise.isTeacherVerified,
       prompt: exercise.prompt,
       answerText: exercise.answerText,
       analysisText: exercise.analysisText,
@@ -140,7 +143,17 @@ export async function getExerciseLibrary({
         (disabled ? 999 : 0),
     };
   });
-  const filtered = rows.filter((row) => {
+  const pointsWithRealSource = new Set(
+    rows
+      .filter((row) => row.sourceType !== TextbookExerciseSourceType.FALLBACK)
+      .map((row) => row.knowledgePoint.id),
+  );
+  const availableRows = rows.filter(
+    (row) =>
+      row.sourceType !== TextbookExerciseSourceType.FALLBACK ||
+      !pointsWithRealSource.has(row.knowledgePoint.id),
+  );
+  const filtered = availableRows.filter((row) => {
     if (view === "favorites") return row.preference.isFavorite;
     if (view === "unused") return !row.preference.isDisabled && row.usage.count === 0;
     if (view === "all") return true;
@@ -165,7 +178,7 @@ export async function appendExerciseToPack({
 }) {
   const [pack, exercise] = await Promise.all([
     prisma.practicePack.findFirst({
-      where: { id: packId, teacherId },
+      where: { id: packId, teacherId, student: { status: StudentStatus.ACTIVE } },
       include: { items: { select: { order: true } } },
     }),
     prisma.textbookExercise.findUnique({
@@ -178,6 +191,7 @@ export async function appendExerciseToPack({
   if (!exercise) throw new Error("题源不存在");
 
   const preference = exercise.preferences[0];
+  if (exercise.isArchived) throw new Error("该题源已归档");
   if (preference?.isDisabled) throw new Error("该题源已停用");
 
   const nextOrder = (pack.items.reduce((max, item) => Math.max(max, item.order), 0) ?? 0) + 1;
@@ -301,13 +315,24 @@ export async function selectExercisesForPracticePack({
 
   const preferenceMap = new Map(preferences.map((item) => [item.textbookExerciseId, item]));
   const exercises = await prisma.textbookExercise.findMany({
-    where: { knowledgePointId: { in: knowledgePointIds } },
+    where: { knowledgePointId: { in: knowledgePointIds }, isArchived: false },
     include: { knowledgePoint: true },
     orderBy: [{ difficulty: "asc" }, { sourceLabel: "asc" }],
   });
   const byPoint = new Map<string, typeof exercises>();
+  const pointsWithRealSource = new Set(
+    exercises
+      .filter((exercise) => exercise.sourceType !== TextbookExerciseSourceType.FALLBACK)
+      .map((exercise) => exercise.knowledgePointId),
+  );
 
   for (const exercise of exercises) {
+    if (
+      exercise.sourceType === TextbookExerciseSourceType.FALLBACK &&
+      pointsWithRealSource.has(exercise.knowledgePointId)
+    ) {
+      continue;
+    }
     const preference = preferenceMap.get(exercise.id);
     if (preference?.isDisabled) continue;
     const existing = byPoint.get(exercise.knowledgePointId) ?? [];

@@ -9,6 +9,7 @@ import {
   type DraftField,
 } from "@/components/DraftAttachmentManager";
 import { KnowledgePointSelector, type KnowledgePointOption } from "@/components/KnowledgePointSelector";
+import { MathContentEditor } from "@/components/MathContentEditor";
 
 type ReviewMistake = {
   id: string;
@@ -122,12 +123,11 @@ export function ReviewForm({
         {draftSections.map((section) => (
           <section className="draft-field" key={section.field}>
             <div className="field">
-              <label htmlFor={section.textName}>{section.label}</label>
-              <textarea
-                className="textarea"
+              <MathContentEditor
                 id={section.textName}
+                label={section.label}
                 name={section.textName}
-                defaultValue={mistake[section.valueKey] ?? ""}
+                value={mistake[section.valueKey] ?? ""}
               />
             </div>
             {section.field === "QUESTION" && legacyQuestionImageUrl ? (

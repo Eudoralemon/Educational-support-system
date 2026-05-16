@@ -1,4 +1,4 @@
-import { MistakeStatus } from "@prisma/client";
+import { MistakeStatus, StudentStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ensureStudentMastery, ensureTeacherMastery } from "@/lib/review";
 
@@ -57,7 +57,7 @@ async function getMistakesForDiagnostics(where: {
     where: {
       status: MistakeStatus.REVIEWED,
       studentId: where.studentId,
-      student: where.teacherId ? { teacherId: where.teacherId } : undefined,
+      student: where.teacherId ? { teacherId: where.teacherId, status: StudentStatus.ACTIVE } : undefined,
     },
     include: {
       student: true,
@@ -166,10 +166,10 @@ export async function getTeacherDiagnostics(teacherId: string) {
 
   const [teacher, students, mistakes, masteries] = await Promise.all([
     prisma.teacher.findUnique({ where: { id: teacherId } }),
-    prisma.student.findMany({ where: { teacherId } }),
+    prisma.student.findMany({ where: { teacherId, status: StudentStatus.ACTIVE } }),
     getMistakesForDiagnostics({ teacherId }),
     prisma.knowledgeMastery.findMany({
-      where: { student: { teacherId } },
+      where: { student: { teacherId, status: StudentStatus.ACTIVE } },
     }),
   ]);
   const masteryOverlay = summarizeMastery(masteries);

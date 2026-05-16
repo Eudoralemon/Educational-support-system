@@ -183,6 +183,14 @@ textarea.compact {
   padding: 16px;
 }
 
+.archived-card {
+  opacity: 0.72;
+}
+
+.danger-zone {
+  border-color: #fecaca;
+}
+
 .stat {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -300,6 +308,12 @@ textarea.compact {
 
 .button.secondary:hover {
   background: #f8fafc;
+}
+
+.button.secondary.active-tool {
+  border-color: var(--brand);
+  color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .button.danger {
@@ -735,6 +749,10 @@ textarea.compact {
   padding: 18px;
 }
 
+.compact-empty {
+  padding: 10px;
+}
+
 .login-screen {
   align-items: center;
   display: grid;
@@ -801,6 +819,101 @@ textarea.compact {
   white-space: pre-wrap;
 }
 
+.math-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.math-editor > label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.math-textarea {
+  font-family:
+    "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  line-height: 1.55;
+  min-height: 154px;
+}
+
+.math-preview {
+  background: #fff;
+  border: 1px solid #cad5e2;
+  border-radius: 8px;
+  min-height: 154px;
+  padding: 12px;
+}
+
+.inline-hint {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  min-height: 34px;
+}
+
+.math-markdown {
+  line-height: 1.75;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.math-markdown p,
+.math-markdown ul,
+.math-markdown ol,
+.math-markdown blockquote {
+  margin: 0 0 0.75em;
+}
+
+.math-markdown p:last-child,
+.math-markdown ul:last-child,
+.math-markdown ol:last-child,
+.math-markdown blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.math-markdown img {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  margin: 8px 0;
+  max-height: 420px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.math-markdown code {
+  background: #eef2f6;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.math-markdown pre {
+  background: #111827;
+  border-radius: 8px;
+  color: #f8fafc;
+  overflow: auto;
+  padding: 12px;
+}
+
+.math-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.math-markdown th,
+.math-markdown td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
 .compact-text {
   margin: 0;
   max-height: 150px;
@@ -851,6 +964,10 @@ textarea.compact {
     display: block;
   }
 
+  .grid.main {
+    display: block;
+  }
+
   .content {
     padding: 0;
   }
@@ -874,7 +991,7 @@ textarea.compact {
     display: none;
   }
 
-  .print-mode-answers .print-item > p {
+  .print-mode-answers .print-prompt {
     display: none;
   }
 }

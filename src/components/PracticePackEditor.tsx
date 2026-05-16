@@ -14,6 +14,8 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
+import { MathContentEditor } from "@/components/MathContentEditor";
+import { MathMarkdown } from "@/components/MathMarkdown";
 
 type PracticeItem = {
   id: string;
@@ -99,10 +101,6 @@ function toDraft(item: PracticeItem): PracticeItemDraft {
 
 function reorder(items: PracticeItemDraft[]) {
   return items.map((item, index) => ({ ...item, order: index + 1 }));
-}
-
-function printableText(value: string | null | undefined) {
-  return value?.trim() || "留空";
 }
 
 export function PracticePackEditor({ pack }: { pack: PracticePack }) {
@@ -473,7 +471,7 @@ export function PracticePackEditor({ pack }: { pack: PracticePack }) {
                     {exercise.masteryScore ?? "--"} 分
                   </span>
                 </div>
-                <p>{exercise.prompt}</p>
+                <MathMarkdown className="compact-text" content={exercise.prompt} />
                 <span className="muted">
                   {exercise.textbook} · {exercise.chapter}
                   {exercise.section ? ` · ${exercise.section}` : ""} · {exercise.sourceLabel}
@@ -585,31 +583,30 @@ export function PracticePackEditor({ pack }: { pack: PracticePack }) {
               </button>
             </div>
             <div className="field">
-              <label htmlFor={`prompt-${item.clientId}`}>题目</label>
-              <textarea
-                className="textarea"
+              <MathContentEditor
                 id={`prompt-${item.clientId}`}
+                label="题目"
                 value={item.prompt}
-                onChange={(event) => updateItem(item.clientId, "prompt", event.target.value)}
+                onChange={(value) => updateItem(item.clientId, "prompt", value)}
               />
             </div>
             <div className="form-grid two">
               <div className="field">
-                <label htmlFor={`answer-${item.clientId}`}>答案</label>
-                <textarea
-                  className="textarea"
+                <MathContentEditor
                   id={`answer-${item.clientId}`}
+                  label="答案"
                   value={item.answerText ?? ""}
-                  onChange={(event) => updateItem(item.clientId, "answerText", event.target.value)}
+                  onChange={(value) => updateItem(item.clientId, "answerText", value)}
+                  compact
                 />
               </div>
               <div className="field">
-                <label htmlFor={`analysis-${item.clientId}`}>解析</label>
-                <textarea
-                  className="textarea"
+                <MathContentEditor
                   id={`analysis-${item.clientId}`}
+                  label="解析"
                   value={item.analysisText ?? ""}
-                  onChange={(event) => updateItem(item.clientId, "analysisText", event.target.value)}
+                  onChange={(value) => updateItem(item.clientId, "analysisText", value)}
+                  compact
                 />
               </div>
             </div>
@@ -621,12 +618,14 @@ export function PracticePackEditor({ pack }: { pack: PracticePack }) {
         {items.map((item, index) => (
           <article className="print-item" key={item.clientId}>
             <h3>第 {index + 1} 题</h3>
-            <p className="preserve-lines">{item.prompt}</p>
+            <div className="print-prompt">
+              <MathMarkdown content={item.prompt} />
+            </div>
             <div className="print-answer">
               <strong>答案</strong>
-              <p className="preserve-lines">{printableText(item.answerText)}</p>
+              <MathMarkdown content={item.answerText} />
               <strong>解析</strong>
-              <p className="preserve-lines">{printableText(item.analysisText)}</p>
+              <MathMarkdown content={item.analysisText} />
             </div>
           </article>
         ))}

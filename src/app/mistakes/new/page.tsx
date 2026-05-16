@@ -1,4 +1,5 @@
 import { Upload } from "lucide-react";
+import { StudentStatus } from "@prisma/client";
 import { MistakeUploadForm } from "@/components/MistakeUploadForm";
 import { requireTeacher } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ export default async function NewMistakePage() {
   const teacher = await requireTeacher();
   const [students, knowledgePoints, errorTypes] = await Promise.all([
     prisma.student.findMany({
-      where: { teacherId: teacher.id },
+      where: { teacherId: teacher.id, status: StudentStatus.ACTIVE },
       orderBy: { createdAt: "desc" },
     }),
     prisma.knowledgePoint.findMany({

@@ -1,4 +1,4 @@
-import { AiTaskType, MistakeAttachmentField, MistakeStatus, Prisma, RegionTag } from "@prisma/client";
+import { AiTaskType, MistakeAttachmentField, MistakeStatus, Prisma, RegionTag, StudentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getAiProvider } from "@/lib/ai";
 import { getCurrentTeacher } from "@/lib/auth";
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const studentId = asString(formData.get("studentId"));
   const student = await prisma.student.findFirst({
-    where: { id: studentId, teacherId: teacher.id },
+    where: { id: studentId, teacherId: teacher.id, status: StudentStatus.ACTIVE },
   });
 
   if (!student) {
